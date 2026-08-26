@@ -1,0 +1,164 @@
+"use client";
+
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Sparkles, ArrowRight, PlayCircle, ShieldCheck } from "lucide-react";
+import { FileUploadCard } from "@/components/upload/FileUploadCard";
+import { UploadedFileCard } from "@/components/upload/UploadedFileCard";
+
+export default function ExamsUploadPage() {
+  const router = useRouter();
+  const [questionPaper, setQuestionPaper] = useState<File | null>(null);
+  const [answerSheet, setAnswerSheet] = useState<File | null>(null);
+  const [qpError, setQpError] = useState<string | null>(null);
+  const [asError, setAsError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const canStartMapping = Boolean(questionPaper && answerSheet && !isSubmitting);
+
+  const handleStartMapping = async (isDemo = false) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const formData = new FormData();
+      if (isDemo) {
+        formData.append("demo", "true");
+      } else {
+        if (!questionPaper || !answerSheet) return;
+        formData.append("questionPaper", questionPaper);
+        formData.append("answerSheet", answerSheet);
+      }
+
+      const res = await fetch("/api/exams", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to start assessment extraction job.");
+      }
+
+      // Navigate to processing screen
+      router.push(`/exams/${data.jobId}/processing`);
+    } catch (err) {
+      console.error("Upload error:", err);
+      setSubmitError(
+        err instanceof Error ? err.message : "Upload failed. Please try again."
+      );
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8 select-none">
+      {/* Page Header */}
+      <div className="bg-white border border-[#E2E2E2] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-2 max-w-xl">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFF3EE] border border-[#FFCCAA] text-[#FF5500] text-xs font-extrabold tracking-wide uppercase">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>AI Assessment Extraction</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-[#21262C] tracking-tight">
+            Upload Question Paper & Answer Sheet
+          </h1>
+          <p className="text-xs sm:text-sm text-[#606266] leading-relaxed">
+            Upload printed question paper and handwritten student answer sheet. AI will automatically extract questions, detect student answers, and generate exact spatial highlighting.
+          </p>
+        </div>
+
+        {/* Demo Assessment Showcase Button */}
+        <div className="shrink-0">
+          <button
+            onClick={() => handleStartMapping(true)}
+            disabled={isSubmitting}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-[#FFF3EE] hover:bg-[#FFE6D5] text-[#FF5500] border border-[#FFCCAA] font-bold text-xs shadow-2xs transition-all duration-150 group"
+          >
+            <PlayCircle className="w-4 h-4 text-[#FF5500] group-hover:scale-110 transition-transform" />
+            <span>Try Demo Assessment</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Upload Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Question Paper Zone */}
+        {questionPaper ? (
+          <UploadedFileCard
+            label="Question Paper"
+            file={questionPaper}
+            onRemove={() => setQuestionPaper(null)}
+          />
+        ) : (
+          <FileUploadCard
+            title="Question Paper"
+            subtitle="Upload printed test / exam question paper (PDF or Image)"
+            onFileSelect={(file) => {
+              setQuestionPaper(file);
+              setQpError(null);
+            }}
+            error={qpError}
+            disabled={isSubmitting}
+          />
+        )}
+
+        {/* Answer Sheet Zone */}
+        {answerSheet ? (
+          <UploadedFileCard
+            label="Student Answer Sheet"
+            file={answerSheet}
+            onRemove={() => setAnswerSheet(null)}
+          />
+        ) : (
+          <FileUploadCard
+            title="Answer Sheet"
+            subtitle="Upload handwritten student answer sheet (PDF or Image)"
+            onFileSelect={(file) => {
+              setAnswerSheet(file);
+              setAsError(null);
+            }}
+            error={asError}
+            disabled={isSubmitting}
+          />
+        )}
+      </div>
+
+      {/* General Submit Error */}
+      {submitError && (
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold">
+          {submitError}
+        </div>
+      )}
+
+      {/* Start Mapping Action Button */}
+      <div className="bg-white border border-[#E2E2E2] rounded-3xl p-6 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2 text-xs text-[#8C8C8C] font-medium">
+          <ShieldCheck className="w-4 h-4 text-[#22C55E]" />
+          <span>Files are encrypted and processed securely.</span>
+        </div>
+
+        <button
+          onClick={() => handleStartMapping(false)}
+          disabled={!canStartMapping}
+          className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all duration-200 shadow-md ${
+            canStartMapping
+              ? "bg-[#FF5500] hover:bg-[#E04A00] text-white hover:shadow-lg active:scale-98"
+              : "bg-[#E2E2E2] text-[#8C8C8C] cursor-not-allowed shadow-none"
+          }`}
+        >
+          {isSubmitting ? (
+            <span>Starting Mapping...</span>
+          ) : (
+            <>
+              <span>Start Mapping</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
