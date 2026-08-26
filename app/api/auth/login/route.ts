@@ -45,8 +45,12 @@ export async function POST(request: NextRequest) {
 
         // Supabase returned an error — pass it to client
         if (error) {
+          const message = /email not confirmed/i.test(error.message)
+            ? "Please confirm your email address before signing in. Check your inbox for the Supabase confirmation email."
+            : error.message || "Invalid email or password.";
+
           return NextResponse.json(
-            { error: error.message || "Invalid email or password." },
+            { error: message },
             { status: 401 }
           );
         }

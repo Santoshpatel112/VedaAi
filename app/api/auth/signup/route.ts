@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        if (!error && data?.user) {
+        if (!error && data?.user && data.session) {
           const user: UserSession = {
             id: data.user.id,
             name,
@@ -52,6 +52,15 @@ export async function POST(request: NextRequest) {
 
           await setSession(user);
           return NextResponse.json({ success: true, user });
+        }
+
+        if (!error && data?.user && !data.session) {
+          return NextResponse.json({
+            success: true,
+            requiresEmailConfirmation: true,
+            message:
+              "Account created. Please confirm your email before signing in.",
+          });
         }
 
         if (error) {

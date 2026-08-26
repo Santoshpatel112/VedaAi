@@ -31,6 +31,12 @@ export default function SignupPage() {
         throw new Error(data.error || "Failed to create account.");
       }
 
+      if (data.requiresEmailConfirmation) {
+        setError(data.message);
+        setLoading(false);
+        return;
+      }
+
       router.push("/exams");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed.");
