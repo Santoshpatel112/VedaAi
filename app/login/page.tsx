@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Lock, Mail, Sparkles } from "lucide-react";
@@ -14,9 +14,21 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [retrySeconds, setRetrySeconds] = useState(0);
+
+  useEffect(() => {
+    if (retrySeconds <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setRetrySeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [retrySeconds]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (retrySeconds > 0) return;
     setError(null);
     setLoading(true);
 
@@ -30,6 +42,9 @@ function LoginForm() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 429) {
+          setRetrySeconds(60);
+        }
         throw new Error(data.error || "Failed to log in. Check your credentials.");
       }
 
@@ -123,7 +138,7 @@ function LoginForm() {
           <button
             id="login-submit"
             type="submit"
-            disabled={loading}
+            disabled={loading || retrySeconds > 0}
             className="w-full py-3.5 rounded-2xl bg-[#FF5500] hover:bg-[#E04A00] active:bg-[#CC3D00] text-white font-black text-sm shadow-md hover:shadow-lg hover:shadow-[#FF5500]/25 transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {loading ? (
@@ -131,6 +146,8 @@ function LoginForm() {
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 <span>Authenticating...</span>
               </>
+            ) : retrySeconds > 0 ? (
+              <span>Try again in {retrySeconds}s</span>
             ) : (
               <>
                 <span>Sign In to Teacher Toolkit</span>

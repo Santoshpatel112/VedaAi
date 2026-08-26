@@ -64,6 +64,16 @@ export async function POST(request: NextRequest) {
         }
 
         if (error) {
+          if (/rate limit|too many requests/i.test(error.message)) {
+            return NextResponse.json(
+              {
+                error:
+                  "Supabase is temporarily limiting confirmation emails. If this account is already confirmed, use Log In instead. Otherwise, wait a few minutes and check your inbox or spam folder before trying again.",
+              },
+              { status: 429 }
+            );
+          }
+
           return NextResponse.json(
             { error: error.message || "Signup failed. Please try again." },
             { status: 400 }

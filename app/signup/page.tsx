@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Lock, Mail, User } from "lucide-react";
@@ -11,11 +11,25 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [retrySeconds, setRetrySeconds] = useState(0);
+
+  useEffect(() => {
+    if (retrySeconds <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setRetrySeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [retrySeconds]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (retrySeconds > 0) return;
     setError(null);
+    setNotice(null);
     setLoading(true);
 
     try {
@@ -28,11 +42,14 @@ export default function SignupPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 429) {
+          setRetrySeconds(60);
+        }
         throw new Error(data.error || "Failed to create account.");
       }
 
       if (data.requiresEmailConfirmation) {
-        setError(data.message);
+        setNotice(data.message);
         setLoading(false);
         return;
       }
@@ -60,8 +77,14 @@ export default function SignupPage() {
         </div>
 
         {error && (
-          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold">
+          <div className="p-3.5 rounded-xl bg-[#FFF3EE] border border-[#FFCCAA] text-[#C2410C] text-xs font-semibold">
             {error}
+          </div>
+        )}
+
+        {notice && (
+          <div className="p-3.5 rounded-xl bg-[#FFF3EE] border border-[#FFCCAA] text-[#C2410C] text-xs font-semibold">
+            {notice}
           </div>
         )}
 
@@ -119,11 +142,13 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || retrySeconds > 0}
             className="w-full py-3.5 rounded-2xl bg-[#FF5500] hover:bg-[#E04A00] text-white font-black text-sm shadow-md transition-all flex items-center justify-center gap-2"
           >
             {loading ? (
               <span>Creating Account...</span>
+            ) : retrySeconds > 0 ? (
+              <span>Try again in {retrySeconds}s</span>
             ) : (
               <>
                 <span>Create Teacher Account</span>
