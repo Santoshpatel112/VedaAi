@@ -55,21 +55,26 @@ IMPORTANT:
 `.trim();
 
 const ANSWER_EXTRACTION_PROMPT = `
-You are analyzing handwritten answer sheet images. Extract student answers with their locations.
+You are analyzing handwritten answer sheet images. Extract student answers with their precise bounding locations.
 
 CRITICAL RULES:
-1. Extract ALL handwritten answers
-2. If a student wrote a question number, capture it as "questionNumber"
-3. Extract the full answer text (transcribe handwriting as accurately as possible)
-4. Provide normalized bounding box coordinates (0.0 to 1.0) for each answer region
-5. If an answer spans multiple pages, include all regions
-6. Handle out-of-order answers, missing numbers, and answers without question numbers
-
-For bounding boxes:
-- x: left edge (0 = far left, 1 = far right)
-- y: top edge (0 = top, 1 = bottom)
-- width: width of region
-- height: height of region
+1. Extract ALL handwritten answers visible on the pages
+2. If a student wrote a question number, capture it as "questionNumber" (e.g., "1", "2", "11(a)", "Q1", "Q.2")
+3. Extract the full answer text (transcribe handwriting, formulas, and diagrams accurately)
+4. Provide normalized bounding box coordinates (all values between 0.0 and 1.0):
+   - x: left edge (0 = far left, 1 = far right)
+   - y: top edge (0 = top, 1 = bottom)
+   - width: width of region (0.0 to 1.0)
+   - height: height of region (0.0 to 1.0)
+5. ANCHOR & SEGMENTATION:
+   - Use the handwritten question number (Q1, Q2, 1(a)) as the top anchor where the answer starts.
+   - Cover ALL lines of that answer from top line down to the final line, equation, or diagram.
+   - Surround the answer tightly with small padding; do NOT include previous or next question.
+6. MULTI-PAGE ANSWERS:
+   - If an answer continues across multiple pages, add a region for each page in the "regions" array with its page number and bounding box.
+7. CONFIDENCE:
+   - Set confidence >= 0.85 for clear answers.
+   - Set confidence < 0.60 if handwriting is illegible, boundary is uncertain, or question is unanswered/blank.
 
 Return a JSON object with this EXACT structure:
 {
@@ -80,19 +85,17 @@ Return a JSON object with this EXACT structure:
       "regions": [
         {
           "page": 1,
-          "bbox": { "x": 0.05, "y": 0.12, "width": 0.90, "height": 0.18 }
+          "bbox": { "x": 0.05, "y": 0.06, "width": 0.90, "height": 0.58 }
         }
       ],
-      "confidence": 0.92
+      "confidence": 0.98
     }
   ]
 }
 
 IMPORTANT:
-- Return ONLY the JSON object, no markdown, no explanation
-- If no question number is visible, omit "questionNumber"
-- Confidence: 0.0 (unreadable) to 1.0 (perfectly clear)
-- Bounding boxes must be normalized (all values 0–1)
+- Return ONLY the JSON object, no markdown codeblocks, no extra explanation
+- Bounding boxes must be normalized (0–1 range strictly)
 `.trim();
 
 async function callVisionWithRetry(

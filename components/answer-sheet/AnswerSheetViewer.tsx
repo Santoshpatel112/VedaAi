@@ -44,6 +44,25 @@ export function AnswerSheetViewer({
     }
   }, [selectedQuestion?.id, selectedAnswer, currentPage, onPageChange, totalPages]);
 
+  // Smooth auto-scroll to highlighted answer region
+  useEffect(() => {
+    if (loading || !containerRef.current || !selectedAnswer) return;
+    const currentRegion = selectedAnswer.regions.find((r) => r.page === currentPage);
+    if (!currentRegion) return;
+
+    const timer = setTimeout(() => {
+      if (!containerRef.current) return;
+      const scrollHeight = containerRef.current.scrollHeight;
+      const targetTop = currentRegion.bbox.y * scrollHeight - 60;
+      containerRef.current.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: "smooth",
+      });
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [selectedQuestion?.id, selectedAnswer, currentPage, zoom, loading]);
+
   // Load and render page document (PDF canvas or Image)
   useEffect(() => {
     let isMounted = true;
@@ -142,7 +161,7 @@ export function AnswerSheetViewer({
       {/* Document View Area */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto p-6 flex justify-center items-start bg-[#F6F6F6] relative min-h-[400px]"
+        className="flex-1 overflow-auto p-6 flex justify-center items-start bg-[#F6F6F6] relative min-h-[400px] scroll-smooth"
       >
         {/* Loading Spinner */}
         {loading && (
@@ -209,6 +228,7 @@ export function AnswerSheetViewer({
                 region={region}
                 questionNumber={selectedQuestion?.number}
                 isMultiPage={selectedAnswer ? selectedAnswer.regions.length > 1 : false}
+                isUncertain={mapping?.status === "uncertain"}
               />
             ))}
 
@@ -221,6 +241,19 @@ export function AnswerSheetViewer({
                 </span>
                 <span className="text-[10px] uppercase bg-amber-700/80 px-2 py-0.5 rounded font-black">
                   Unanswered
+                </span>
+              </div>
+            )}
+
+            {/* Banner for Low Confidence / Needs Review */}
+            {selectedQuestion && mapping?.status === "uncertain" && (
+              <div className="absolute top-4 left-4 right-4 bg-orange-500/90 text-white font-bold text-xs p-3 rounded-xl shadow-lg backdrop-blur-xs flex items-center justify-between z-20 animate-fade-in">
+                <span className="flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4" />
+                  Answer mapping confidence low — Marked for Review
+                </span>
+                <span className="text-[10px] uppercase bg-orange-700/80 px-2 py-0.5 rounded font-black">
+                  Needs Review
                 </span>
               </div>
             )}

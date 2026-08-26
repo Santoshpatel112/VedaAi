@@ -7,16 +7,18 @@ interface HighlightOverlayProps {
   region: AnswerRegion;
   questionNumber?: string;
   isMultiPage?: boolean;
+  isUncertain?: boolean;
 }
 
 export function HighlightOverlay({
   region,
   questionNumber,
   isMultiPage = false,
+  isUncertain = false,
 }: HighlightOverlayProps) {
   const { bbox } = region;
 
-  // Convert normalized 0-1 coordinates to percentage CSS for responsive alignment
+  // Convert normalized 0-1 coordinates to percentage CSS for proportional, responsive alignment
   const style: React.CSSProperties = {
     left: `${bbox.x * 100}%`,
     top: `${bbox.y * 100}%`,
@@ -24,15 +26,21 @@ export function HighlightOverlay({
     height: `${bbox.height * 100}%`,
   };
 
+  const borderColor = isUncertain ? "border-orange-500 bg-orange-500/15" : "border-[#22C55E] bg-[#22C55E]/15";
+  const badgeColor = isUncertain ? "bg-orange-500" : "bg-[#22C55E]";
+
   return (
     <div
       style={style}
-      className="absolute border-2 border-[#22C55E] bg-[#22C55E]/15 rounded-xl pointer-events-none transition-all duration-300 ease-out animate-highlight-pulse shadow-md z-20"
+      className={`absolute border-2 ${borderColor} rounded-xl pointer-events-none transition-all duration-300 ease-out animate-highlight-pulse shadow-md z-20`}
     >
       {/* Q Label Tag on top-left of bounding box */}
-      <div className="absolute -top-3.5 left-2 bg-[#22C55E] text-white text-[11px] font-black px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1 select-none z-30">
+      <div
+        className={`absolute -top-3.5 left-2 ${badgeColor} text-white text-[11px] font-black px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1 select-none z-30`}
+      >
         <span>Q{questionNumber || "Answer"}</span>
-        {isMultiPage && <span className="opacity-80 text-[9px]">(contd)</span>}
+        {isUncertain && <span className="opacity-90 text-[9px]">(Review)</span>}
+        {isMultiPage && !isUncertain && <span className="opacity-80 text-[9px]">(contd)</span>}
       </div>
 
       {/* Corner accents */}
@@ -43,3 +51,4 @@ export function HighlightOverlay({
     </div>
   );
 }
+

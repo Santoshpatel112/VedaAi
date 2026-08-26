@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { X, Eye, FileText, CheckCircle2, AlertCircle } from "lucide-react";
 import { ResultsSummary } from "@/components/results/ResultsSummary";
 import { QuestionList } from "@/components/questions/QuestionList";
 import { AnswerSheetViewer } from "@/components/answer-sheet/AnswerSheetViewer";
@@ -20,6 +21,7 @@ export default function ResultsPage() {
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [mobileTab, setMobileTab] = useState<"questions" | "answer-sheet">("questions");
+  const [viewOverlayOpen, setViewOverlayOpen] = useState(false);
 
   useEffect(() => {
     if (!jobId) return;
@@ -45,6 +47,17 @@ export default function ResultsPage() {
         setLoading(false);
       });
   }, [jobId]);
+
+  // Handle Escape key to close View Mode overlay
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && viewOverlayOpen) {
+        setViewOverlayOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [viewOverlayOpen]);
 
   if (loading) {
     return (
@@ -95,8 +108,13 @@ export default function ResultsPage() {
     }
   };
 
+  const handleOpenViewOverlay = (questionId: string) => {
+    setSelectedQuestionId(questionId);
+    setViewOverlayOpen(true);
+  };
+
   return (
-    <div className="space-y-4 flex flex-col h-[calc(100vh-6rem)]">
+    <div className="space-y-4 flex flex-col h-[calc(100vh-6rem)] relative">
       {/* Top Results Summary Bar */}
       <ResultsSummary results={results} />
 
@@ -120,6 +138,7 @@ export default function ResultsPage() {
             mappings={mappings}
             selectedQuestionId={selectedQuestionId}
             onSelectQuestion={handleSelectQuestion}
+            onViewQuestion={handleOpenViewOverlay}
           />
         </div>
 
@@ -140,6 +159,69 @@ export default function ResultsPage() {
           />
         </div>
       </div>
+
+      {/* View Mode Side Panel / Overlay Modal */}
+      {viewOverlayOpen && selectedQuestion && (
+        <div className="fixed inset-0 z-50 bg-[#21262C]/70 backdrop-blur-xs flex justify-end animate-fade-in">
+          <div className="bg-[#F6F6F6] w-full max-w-4xl h-full shadow-2xl flex flex-col border-l border-[#E2E2E2]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-white border-b border-[#E2E2E2] flex items-center justify-between shadow-xs shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-[#FFF3EE] text-[#FF5500] flex items-center justify-center font-extrabold text-sm shrink-0 border border-[#FFCCAA]">
+                  Q{selectedQuestion.number}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-sm text-[#21262C]">
+                      Question {selectedQuestion.number} Answer Region
+                    </span>
+                    {mapping?.status === "matched" && (
+                      <span className="text-[10px] font-bold text-[#22C55E] bg-[#F0FDF4] px-2 py-0.5 rounded-full border border-[#BBF7D0]">
+                        Mapped
+                      </span>
+                    )}
+                    {mapping?.status === "uncertain" && (
+                      <span className="text-[10px] font-bold text-[#FF8844] bg-[#FFF3EE] px-2 py-0.5 rounded-full border border-[#FFCCAA]">
+                        Needs Review
+                      </span>
+                    )}
+                    {mapping?.status === "unanswered" && (
+                      <span className="text-[10px] font-semibold text-[#8C8C8C] bg-[#F6F6F6] px-2 py-0.5 rounded-full border border-[#E2E2E2]">
+                        Unanswered
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#606266] truncate max-w-xl">
+                    {selectedQuestion.text}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setViewOverlayOpen(false)}
+                className="w-8 h-8 rounded-xl bg-[#F6F6F6] hover:bg-[#E2E2E2] text-[#21262C] flex items-center justify-center transition-colors shrink-0"
+                title="Close Viewer (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: Answer Sheet Viewer */}
+            <div className="flex-1 overflow-hidden p-4">
+              <AnswerSheetViewer
+                jobId={jobId}
+                selectedQuestion={selectedQuestion}
+                selectedAnswer={selectedAnswer}
+                mapping={mapping}
+                totalPages={answerSheetPageCount}
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

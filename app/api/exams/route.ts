@@ -6,7 +6,7 @@ import { createJob } from "@/lib/jobs/job-store";
 import { processExam } from "@/lib/pipeline";
 import { validateFileUpload } from "@/lib/validation/schemas";
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR ?? "/tmp/veda";
+const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(process.cwd(), "tmp", "veda");
 
 export async function POST(request: NextRequest) {
   try {

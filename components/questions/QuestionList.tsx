@@ -10,6 +10,7 @@ interface QuestionListProps {
   mappings: AnswerMapping[];
   selectedQuestionId: string | null;
   onSelectQuestion: (questionId: string) => void;
+  onViewQuestion?: (questionId: string) => void;
 }
 
 export function QuestionList({
@@ -17,6 +18,7 @@ export function QuestionList({
   mappings,
   selectedQuestionId,
   onSelectQuestion,
+  onViewQuestion,
 }: QuestionListProps) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "mapped" | "unanswered" | "uncertain">("all");
@@ -110,6 +112,7 @@ export function QuestionList({
                 mapping={mapping}
                 isSelected={selectedQuestionId === q.id}
                 onSelect={() => onSelectQuestion(q.id)}
+                onViewAnswer={onViewQuestion ? () => onViewQuestion(q.id) : undefined}
               />
             );
           })
@@ -118,3 +121,4 @@ export function QuestionList({
     </div>
   );
 }
+

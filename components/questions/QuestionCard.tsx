@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { CheckCircle2, AlertCircle, HelpCircle, ChevronDown, Sparkles } from "lucide-react";
+import { CheckCircle2, AlertCircle, HelpCircle, ChevronDown, Sparkles, Eye } from "lucide-react";
 import type { Question, AnswerMapping } from "@/lib/types";
 
 interface QuestionCardProps {
@@ -9,6 +9,7 @@ interface QuestionCardProps {
   mapping: AnswerMapping;
   isSelected: boolean;
   onSelect: () => void;
+  onViewAnswer?: () => void;
 }
 
 export function QuestionCard({
@@ -16,6 +17,7 @@ export function QuestionCard({
   mapping,
   isSelected,
   onSelect,
+  onViewAnswer,
 }: QuestionCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -82,7 +84,7 @@ export function QuestionCard({
           </div>
         </div>
 
-        {/* Status Indicator / Expand toggle */}
+        {/* Status Indicator / Actions */}
         <div className="flex items-center gap-2 shrink-0">
           {isMatched && (
             <span className="text-xs font-bold text-[#22C55E] bg-[#F0FDF4] px-2.5 py-1 rounded-full border border-[#BBF7D0]">
@@ -99,6 +101,20 @@ export function QuestionCard({
               Review
             </span>
           )}
+
+          {/* View Answer button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+              if (onViewAnswer) onViewAnswer();
+            }}
+            className="flex items-center gap-1 text-xs font-bold text-[#FF5500] hover:text-white bg-[#FFF3EE] hover:bg-[#FF5500] px-2.5 py-1 rounded-full border border-[#FFCCAA] transition-colors shadow-2xs"
+            title="View Answer Region"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>View</span>
+          </button>
 
           {mapping.feedback && (
             <button
@@ -138,3 +154,4 @@ export function QuestionCard({
     </div>
   );
 }
+

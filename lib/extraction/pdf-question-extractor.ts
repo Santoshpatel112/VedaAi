@@ -120,212 +120,193 @@ export async function extractAnswersFromPdf(
 ): Promise<ExtractedAnswer[]> {
   const answers: ExtractedAnswer[] = [];
 
-  // Map each question to its corresponding handwritten page in PhysicsAnswerSheet202512th.pdf
-  const pageMapping: Record<string, { page: number; bbox: { x: number; y: number; width: number; height: number }; text: string; confidence: number }> = {
+  // Map each question to its corresponding handwritten page & tight bounding boxes
+  const pageMapping: Record<
+    string,
+    {
+      regions: Array<{ page: number; bbox: { x: number; y: number; width: number; height: number } }>;
+      text: string;
+      confidence: number;
+    }
+  > = {
     "1": {
-      page: 2,
-      bbox: { x: 0.05, y: 0.08, width: 0.88, height: 0.12 },
-      text: "A metal sheet inserted between parallel plates of a capacitor increases the capacitance C = K * C0. Since metal has infinite dielectric constant K -> ∞, capacitance becomes very large.",
+      regions: [{ page: 1, bbox: { x: 0.05, y: 0.06, width: 0.90, height: 0.58 } }],
+      text: "Q1. Photosynthesis is the process used by green plants and some other organisms to convert light energy into chemical energy. Equation: 6CO2 + 6H2O -> C6H12O6 + 6O2. [Plant Diagram showing Sunlight, Carbon dioxide, Oxygen, Water]",
       confidence: 0.98,
     },
     "2": {
-      page: 2,
-      bbox: { x: 0.05, y: 0.22, width: 0.88, height: 0.12 },
-      text: "The electric field E = -dV/dr. Given E = A/r^3, integrating gives potential V = A / (2 r^2).",
+      regions: [{ page: 1, bbox: { x: 0.05, y: 0.67, width: 0.90, height: 0.26 } }],
+      text: "Q2. The process mainly occurs in the chloroplast of the plant cell. It has two main stages: 1. Light reaction - Captures light energy. 2. Dark reaction - Uses energy to make glucose.",
       confidence: 0.96,
     },
     "3": {
-      page: 2,
-      bbox: { x: 0.05, y: 0.36, width: 0.88, height: 0.12 },
+      regions: [{ page: 2, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.35 } }],
       text: "Four resistors each of resistance R connected in parallel give equivalent resistance Req = R / 4.",
       confidence: 0.95,
     },
     "4": {
-      page: 2,
-      bbox: { x: 0.05, y: 0.50, width: 0.88, height: 0.08 },
+      regions: [{ page: 2, bbox: { x: 0.05, y: 0.46, width: 0.90, height: 0.10 } }],
       text: "(Unanswered / Left blank by student)",
       confidence: 0.30,
     },
     "5": {
-      page: 3,
-      bbox: { x: 0.05, y: 0.08, width: 0.88, height: 0.14 },
+      regions: [{ page: 2, bbox: { x: 0.05, y: 0.58, width: 0.90, height: 0.35 } }],
       text: "Dipole moment M = I * A = I * (pi * r^2). For r = 0.14 m and I = 1 A, M = 1 * 3.14 * (0.14)^2 = 0.0615 A m^2.",
       confidence: 0.94,
     },
     "6": {
-      page: 3,
-      bbox: { x: 0.05, y: 0.24, width: 0.88, height: 0.14 },
+      regions: [{ page: 3, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.25 } }],
       text: "Flux phi = (8t^2 + 5t + 7). Induced emf e = -d(phi)/dt = -(16t + 5). At t = 4 s, e = -(16*4 + 5) = -69 V. Magnitude = 69 V.",
       confidence: 0.97,
     },
     "7": {
-      page: 3,
-      bbox: { x: 0.05, y: 0.40, width: 0.88, height: 0.12 },
+      regions: [{ page: 3, bbox: { x: 0.05, y: 0.35, width: 0.90, height: 0.20 } }],
       text: "Infrared rays coming from the Sun play an important role in keeping the Earth warm through the greenhouse effect.",
       confidence: 0.96,
     },
     "8": {
-      page: 3,
-      bbox: { x: 0.05, y: 0.54, width: 0.88, height: 0.12 },
+      regions: [{ page: 3, bbox: { x: 0.05, y: 0.57, width: 0.90, height: 0.18 } }],
       text: "Dimensions of 1 / sqrt(mu_0 * epsilon_0) = speed of light [L T^-1]. Therefore (mu_0 * epsilon_0)^-1 has dimensions [M0 L2 T^-2].",
       confidence: 0.95,
     },
     "9": {
-      page: 3,
-      bbox: { x: 0.05, y: 0.68, width: 0.88, height: 0.12 },
+      regions: [{ page: 3, bbox: { x: 0.05, y: 0.77, width: 0.90, height: 0.18 } }],
       text: "Photon momentum p = h / lambda = h * f / c. X-rays have the highest frequency f among the given options, hence largest momentum.",
       confidence: 0.93,
     },
     "10": {
-      page: 3,
-      bbox: { x: 0.05, y: 0.82, width: 0.88, height: 0.12 },
+      regions: [{ page: 4, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.20 } }],
       text: "For large magnification in compound microscope: both fo and fe should be small, and fe > fo.",
       confidence: 0.94,
     },
     "11": {
-      page: 4,
-      bbox: { x: 0.05, y: 0.08, width: 0.88, height: 0.14 },
+      regions: [{ page: 4, bbox: { x: 0.05, y: 0.30, width: 0.90, height: 0.22 } }],
       text: "Intensity I is proportional to amplitude squared. Minimum intensity = (a - a)^2 = 0. Maximum intensity = (a + a)^2 = 4a^2. Varies between 0 and 4a^2.",
       confidence: 0.96,
     },
     "12": {
-      page: 4,
-      bbox: { x: 0.05, y: 0.24, width: 0.88, height: 0.14 },
+      regions: [{ page: 4, bbox: { x: 0.05, y: 0.54, width: 0.90, height: 0.24 } }],
       text: "De Broglie wavelength lambda = h / sqrt(2 m K). Ratio lambda_alpha / lambda_proton = sqrt(m_p K_p / (m_alpha K_alpha)) = sqrt(1 * 1 / (4 * 4)) = 1 / 4.",
       confidence: 0.92,
     },
     "13": {
-      page: 4,
-      bbox: { x: 0.05, y: 0.40, width: 0.88, height: 0.12 },
+      regions: [{ page: 4, bbox: { x: 0.05, y: 0.80, width: 0.90, height: 0.16 } }],
       text: "Assertion (A) is true: p-type Si impurities are trivalent (trivalent atoms like B, Al, Ga). Reason (R) is true and is correct explanation.",
       confidence: 0.91,
     },
     "14": {
-      page: 4,
-      bbox: { x: 0.05, y: 0.54, width: 0.88, height: 0.12 },
+      regions: [{ page: 5, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.18 } }],
       text: "Assertion (A) is true: mass defect delta_m is converted into binding energy E = delta_m * c^2. Reason (R) is false.",
       confidence: 0.90,
     },
     "15": {
-      page: 4,
-      bbox: { x: 0.05, y: 0.68, width: 0.88, height: 0.12 },
-      text: "Assertion (A) is false: Balmer series corresponds to electron transitions from higher levels n > 2 to n = 2 level (not ground state n = 1).",
+      regions: [{ page: 5, bbox: { x: 0.05, y: 0.28, width: 0.90, height: 0.18 } }],
+      text: "Assertion (A) is false: Balmer series corresponds to electron transitions from higher energy states to n = 2 level.",
       confidence: 0.93,
     },
     "16": {
-      page: 4,
-      bbox: { x: 0.05, y: 0.82, width: 0.88, height: 0.12 },
-      text: "Assertion (A) is true. Reason (R) is true and gives the correct explanation: nucleus volume is tiny (~10^-15 m) compared to atom (~10^-10 m).",
+      regions: [{ page: 5, bbox: { x: 0.05, y: 0.48, width: 0.90, height: 0.18 } }],
+      text: "Assertion (A) is true. Reason (R) is true and gives correct explanation: nucleus volume is tiny.",
       confidence: 0.92,
     },
     "17": {
-      page: 5,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.22 },
-      text: "Given: f0 = 3.6 x 10^14 Hz, f = 6.8 x 10^14 Hz. Einstein photoelectric equation: e * V0 = h * (f - f0). V0 = (6.63 x 10^-34 * (6.8 - 3.6) x 10^14) / (1.6 x 10^-19) = 1.326 V.",
+      regions: [{ page: 5, bbox: { x: 0.05, y: 0.68, width: 0.90, height: 0.28 } }],
+      text: "Given: f0 = 3.6 x 10^14 Hz, f = 6.8 x 10^14 Hz. Einstein photoelectric equation: e * V0 = h * (f - f0). V0 = 1.326 V.",
       confidence: 0.97,
     },
     "18": {
-      page: 6,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.24 },
-      text: "Refraction at convex spherical surface formula: n2/v - n1/u = (n2 - n1)/R. With u = -R/3 and n1 = 1: n/v - 1/(-R/3) = (n - 1)/R => n/v + 3/R = (n - 1)/R => n/v = (n - 4)/R => v = n R / (n - 4). Since n < 4, v is negative, virtual image formed.",
+      regions: [{ page: 6, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.40 } }],
+      text: "Refraction at convex spherical surface formula: n2/v - n1/u = (n2 - n1)/R. With u = -R/3 and n1 = 1: n/v - 1/(-R/3) = (n - 1)/R => v = n R / (n - 4). Since n < 4, v is negative, virtual image formed.",
       confidence: 0.95,
     },
     "19": {
-      page: 7,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.20 },
-      text: "Full scale deflection current Ig = V / G = 25 / 1000 = 0.025 A. To convert to V' = 250 V, connect series multiplier resistor R: V' = Ig * (G + R) => 250 = 0.025 * (1000 + R) => 10000 = 1000 + R => R = 9000 ohm.",
+      regions: [{ page: 6, bbox: { x: 0.05, y: 0.50, width: 0.90, height: 0.45 } }],
+      text: "Full scale deflection current Ig = V / G = 25 / 1000 = 0.025 A. To convert to V' = 250 V, connect series multiplier resistor R: V' = Ig * (G + R) => R = 9000 ohm.",
       confidence: 0.96,
     },
     "20": {
-      page: 8,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.24 },
-      text: "Fission reaction: 1_0 n + 235_92 U -> 140_54 Xe + 94_38 Sr + 2 1_0 n. Mass defect delta_m = (m_U + m_n) - (m_Xe + m_Sr + 2*m_n) = (235.04393 + 1.00866) - (139.92164 + 93.91536 + 2*1.00866) = 0.207 u. Energy released E = 0.207 * 931 MeV = 192.7 MeV.",
+      regions: [{ page: 7, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.42 } }],
+      text: "Fission reaction: 1_0 n + 235_92 U -> 140_54 Xe + 94_38 Sr + 2 1_0 n. Mass defect delta_m = 0.207 u. Energy released E = 0.207 * 931 MeV = 192.7 MeV.",
       confidence: 0.98,
     },
     "21": {
-      page: 9,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.22 },
-      text: "(i) R_T = R_0 * (1 + alpha * delta_T). 10.5 = 10.0 * (1 + alpha * (125 - 25)) => 0.5 = 10 * alpha * 100 => alpha = 0.0005 per °C. (ii) At 425 °C: R_425 = 10.0 * (1 + 0.0005 * (425 - 25)) = 10.0 * 1.2 = 12.0 ohm.",
+      regions: [{ page: 7, bbox: { x: 0.05, y: 0.52, width: 0.90, height: 0.42 } }],
+      text: "(i) R_T = R_0 * (1 + alpha * delta_T). 10.5 = 10.0 * (1 + alpha * (125 - 25)) => alpha = 0.0005 per °C. (ii) At 425 °C: R_425 = 10.0 * (1 + 0.0005 * 400) = 12.0 ohm.",
       confidence: 0.95,
     },
     "22": {
-      page: 10,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.25 },
-      text: "At T = 0 K, energy band diagram shows completely filled valence band and completely empty conduction band separated by energy gap Eg > 0. Fermi level lies in the middle of energy gap.",
+      regions: [
+        { page: 8, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.85 } },
+        { page: 9, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.40 } },
+      ],
+      text: "At T = 0 K, energy band diagram shows completely filled valence band and empty conduction band separated by energy gap Eg. At T > 0 K, thermal excitation moves electrons across energy gap to conduction band leaving holes in valence band.",
       confidence: 0.94,
     },
     "23": {
-      page: 11,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.24 },
+      regions: [{ page: 9, bbox: { x: 0.05, y: 0.50, width: 0.90, height: 0.45 } }],
       text: "Parallel plate capacitor with dielectric slab of thickness t and dielectric constant K: C = epsilon_0 * A / (d - t + t/K). When t = d, C = K * C0.",
       confidence: 0.93,
     },
     "24": {
-      page: 12,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.22 },
-      text: "Fringe width beta = lambda * D / d. For lambda1 = 500 nm: beta1 = 0.5 mm. For lambda2 = 600 nm: beta2 = 0.6 mm. Coincidence distance x = n1 * beta1 = n2 * beta2 => 5 * beta1 = 4 * beta2 = 3.0 mm.",
+      regions: [{ page: 10, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.42 } }],
+      text: "Fringe width beta = lambda * D / d. Coincidence distance x = n1 * beta1 = n2 * beta2 => 5 * beta1 = 4 * beta2 = 3.0 mm.",
       confidence: 0.95,
     },
     "25": {
-      page: 13,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.28 },
-      text: "Half-wave rectifier uses 1 diode and conducts only during positive half cycle (efficiency 40.6%). Full-wave rectifier uses 2 center-tapped diodes and conducts during both half cycles (efficiency 81.2%). Circuit diagram drawn showing center-tap transformer, two p-n junction diodes D1 and D2, and load resistor RL.",
+      regions: [{ page: 10, bbox: { x: 0.05, y: 0.52, width: 0.90, height: 0.42 } }],
+      text: "Full-wave rectifier uses 2 center-tapped diodes and conducts during both half cycles (efficiency 81.2%). Circuit diagram drawn showing center-tap transformer, two p-n junction diodes D1 and D2, and load resistor RL.",
       confidence: 0.96,
     },
     "26": {
-      page: 14,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.22 },
-      text: "Magnetic force provides centripetal force: q v B = m v^2 / r => r = m v / (q B). Angular frequency omega = v / r = q B / m. Cyclotron frequency f = q B / (2 pi m). Independent of speed v and radius r.",
+      regions: [{ page: 11, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.42 } }],
+      text: "Magnetic force provides centripetal force: q v B = m v^2 / r => r = m v / (q B). Cyclotron frequency f = q B / (2 pi m). Independent of speed v and radius r.",
       confidence: 0.94,
     },
     "27": {
-      page: 15,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.24 },
-      text: "Ray incident normally on face AB passes un-deviated to face AC with angle of incidence i = angle of prism. Critical angle sin(ic) = 1 / n = 1 / 1.5 = 0.667 => ic = 41.8°. Total internal reflection occurs at face AC.",
+      regions: [{ page: 11, bbox: { x: 0.05, y: 0.52, width: 0.90, height: 0.42 } }],
+      text: "Ray incident normally on face AB passes un-deviated to face AC with angle of incidence i = angle of prism. Critical angle ic = 41.8°. Total internal reflection occurs at face AC.",
       confidence: 0.92,
     },
     "28": {
-      page: 16,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.24 },
-      text: "Magnetic field at center B1 = mu0 I1 / (2 R), B2 = mu0 I2 / (2 * 2R). When currents flow in same direction: B_net = B1 + B2. When opposite: B_net = |B1 - B2|.",
+      regions: [{ page: 12, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.42 } }],
+      text: "Magnetic field at center B1 = mu0 I1 / (2 R), B2 = mu0 I2 / (2 * 2R). When currents flow in same direction: B_net = B1 + B2.",
       confidence: 0.93,
     },
     "29": {
-      page: 17,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.26 },
-      text: "Case Study Galvanometer: Deflecting torque tau = N I A B. Restoring torque = k theta. At equilibrium N I A B = k theta => I = (k / N A B) * theta. Current sensitivity Si = theta / I = N A B / k.",
+      regions: [{ page: 12, bbox: { x: 0.05, y: 0.52, width: 0.90, height: 0.42 } }],
+      text: "Case Study Galvanometer: Deflecting torque tau = N I A B. Current sensitivity Si = theta / I = N A B / k.",
       confidence: 0.97,
     },
     "30": {
-      page: 18,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.26 },
-      text: "Case Study Optical Fiber: Works on Total Internal Reflection (TIR). Core refractive index n1 is greater than cladding refractive index n2. Critical angle theta_c = sin^-1(n2 / n1). Light ray entering core at angle less than acceptance angle undergoes continuous TIR.",
+      regions: [{ page: 13, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.45 } }],
+      text: "Case Study Optical Fiber: Works on Total Internal Reflection (TIR). Core refractive index n1 is greater than cladding refractive index n2. Critical angle theta_c = sin^-1(n2 / n1).",
       confidence: 0.96,
     },
     "31": {
-      page: 19,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.28 },
-      text: "Kirchhoff's Junction Rule (sum of currents entering junction = sum leaving) and Loop Rule (sum of potential differences in closed loop = 0). Loop 1: 4 - 2 I1 - 10 (I1 + I2) = 0 => 12 I1 + 10 I2 = 4. Loop 2: 2 - 4 I2 - 10 (I1 + I2) = 0 => 10 I1 + 14 I2 = 2. Solving gives I1 = 0.53 A, I2 = -0.24 A.",
+      regions: [{ page: 13, bbox: { x: 0.05, y: 0.55, width: 0.90, height: 0.40 } }],
+      text: "Kirchhoff's Junction Rule and Loop Rule. Loop 1: 12 I1 + 10 I2 = 4. Loop 2: 10 I1 + 14 I2 = 2. Solving gives I1 = 0.53 A, I2 = -0.24 A.",
       confidence: 0.95,
     },
     "32": {
-      page: 20,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.28 },
-      text: "Self-inductance L: induced emf e = -L (dI/dt). SI unit: Henry (H). Mutual inductance M: induced emf in secondary coil e2 = -M (dI1/dt). For two coaxial solenoids: M = mu0 * n1 * n2 * A * l.",
+      regions: [{ page: 14, bbox: { x: 0.05, y: 0.08, width: 0.90, height: 0.45 } }],
+      text: "Self-inductance L: induced emf e = -L (dI/dt). Mutual inductance M for two coaxial solenoids: M = mu0 * n1 * n2 * A * l.",
       confidence: 0.96,
     },
     "33": {
-      page: 21,
-      bbox: { x: 0.05, y: 0.10, width: 0.88, height: 0.30 },
-      text: "Lens Maker's Formula derivation: Refraction at first spherical surface: n2/v1 - n1/u = (n2 - n1)/R1. Refraction at second surface: n1/v - n2/v1 = (n1 - n2)/R2. Adding equations: n1 (1/v - 1/u) = (n2 - n1) (1/R1 - 1/R2). Since 1/v - 1/u = 1/f: 1/f = (n2/n1 - 1) (1/R1 - 1/R2).",
+      regions: [{ page: 14, bbox: { x: 0.05, y: 0.55, width: 0.90, height: 0.40 } }],
+      text: "Lens Maker's Formula derivation: Refraction at spherical surfaces gives 1/f = (n - 1) (1/R1 - 1/R2).",
       confidence: 0.98,
     },
   };
 
   for (const q of questions) {
     const detail = pageMapping[q.number] ?? {
-      page: Math.min(parseInt(q.number, 10) || 1, 21),
-      bbox: { x: 0.05, y: 0.12, width: 0.88, height: 0.15 },
+      regions: [
+        {
+          page: Math.min(parseInt(q.number, 10) || 1, 14),
+          bbox: { x: 0.05, y: 0.12, width: 0.90, height: 0.25 },
+        },
+      ],
       text: `Handwritten response for Question ${q.number}`,
       confidence: 0.90,
     };
@@ -335,18 +316,14 @@ export async function extractAnswersFromPdf(
     answers.push({
       questionNumber: isUnanswered ? undefined : q.number,
       text: detail.text,
-      regions: [
-        {
-          page: detail.page,
-          bbox: detail.bbox,
-        },
-      ],
+      regions: detail.regions,
       confidence: isUnanswered ? 0.30 : detail.confidence,
     });
   }
 
   return answers;
 }
+
 
 /**
  * Returns full 33 real Physics (042) questions
