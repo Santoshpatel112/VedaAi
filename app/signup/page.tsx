@@ -49,7 +49,7 @@ export default function SignupPage() {
       }
 
       if (data.requiresEmailConfirmation) {
-        setNotice(data.message);
+        setNotice(`${data.message} Then return here and use Log In.`);
         setLoading(false);
         return;
       }

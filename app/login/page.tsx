@@ -12,7 +12,9 @@ function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    () => searchParams.get("error")
+  );
   const [loading, setLoading] = useState(false);
   const [retrySeconds, setRetrySeconds] = useState(0);
 

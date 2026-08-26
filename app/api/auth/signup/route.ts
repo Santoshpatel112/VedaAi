@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
           email,
           password,
           options: {
+            emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin}/auth/callback`,
             data: {
               full_name: name,
               school: school || undefined,
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
               {
                 error:
-                  "Supabase is temporarily limiting confirmation emails. If this account is already confirmed, use Log In instead. Otherwise, wait a few minutes and check your inbox or spam folder before trying again.",
+                  "Supabase is temporarily limiting confirmation emails. Do not keep retrying signup. Check your inbox or spam folder, or use Log In if this account is already confirmed.",
               },
               { status: 429 }
             );
