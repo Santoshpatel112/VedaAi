@@ -64,8 +64,18 @@ export async function processExam(
     const rawAnswers = isDemo
       ? rawQuestions.map((question) => ({
           questionNumber: question.number,
-          text: "Demo answer",
-          regions: [],
+          text: `Demo answer for Question ${question.number}: ${question.text}`,
+          regions: [
+            {
+              page: Math.min(Math.ceil(Number(question.number) / 2), 14),
+              bbox: {
+                x: 0.05,
+                y: Number(question.number) % 2 === 1 ? 0.08 : 0.52,
+                width: 0.9,
+                height: 0.35,
+              },
+            },
+          ],
           confidence: 0.98,
         }))
       : await extractAnswersFromPdf(answerSheetPath, rawQuestions);

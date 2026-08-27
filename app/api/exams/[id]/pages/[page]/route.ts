@@ -19,10 +19,6 @@ export async function GET(
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
-  if (!job.answerSheetPath) {
-    return NextResponse.json({ error: "Answer sheet not available" }, { status: 404 });
-  }
-
   // Demo mode: return a placeholder page image
   if (job.isDemo) {
     // Return a simple SVG as a placeholder for demo pages
@@ -33,6 +29,10 @@ export async function GET(
         "Cache-Control": "public, max-age=3600",
       },
     });
+  }
+
+  if (!job.answerSheetPath) {
+    return NextResponse.json({ error: "Answer sheet not available" }, { status: 404 });
   }
 
   const base64 = await getPageImageBase64(job.answerSheetPath, pageNumber);

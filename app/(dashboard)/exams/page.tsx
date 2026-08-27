@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation";
 import { Sparkles, ArrowRight, PlayCircle, ShieldCheck } from "lucide-react";
 import { FileUploadCard } from "@/components/upload/FileUploadCard";
 import { UploadedFileCard } from "@/components/upload/UploadedFileCard";
-// Files are sent to the server route as multipart data. This keeps Storage
-// credentials and bucket policy details out of the browser upload path.
+import { createClient } from "@/utils/supabase/client";
+
+const STORAGE_BUCKET = "assessment-files";
+const hasStorageConfig = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+);
 
 export default function ExamsUploadPage() {
   const router = useRouter();
@@ -38,10 +43,68 @@ export default function ExamsUploadPage() {
         return;
       } else {
         if (!questionPaper || !answerSheet) return;
-        const formData = new FormData();
-        formData.append("questionPaper", questionPaper);
-        formData.append("answerSheet", answerSheet);
-        const res = await fetch("/api/exams", { method: "POST", body: formData });
+        if (!hasStorageConfig && process.env.NODE_ENV !== "development") {
+          throw new Error("Production file storage is not configured.");
+        }
+
+        if (!hasStorageConfig) {
+          const formData = new FormData();
+          formData.append("questionPaper", questionPaper);
+          formData.append("answerSheet", answerSheet);
+          const res = await fetch("/api/exams", { method: "POST", body: formData });
+          const data = await readApiResponse(res);
+          if (!res.ok) throw new Error(data.error || "Failed to start assessment extraction job.");
+          router.push(`/exams/${data.jobId}/processing`);
+          return;
+        }
+
+        const supabase = createClient();
+        const uploadId = crypto.randomUUID();
+        const uploadedPaths: Record<string, string> = {};
+        try {
+          for (const [file, key] of [
+            [questionPaper, "questionPaper"],
+            [answerSheet, "answerSheet"],
+          ] as const) {
+            const storagePath = `${uploadId}/${key}-${file.name}`;
+            const { error } = await supabase.storage
+              .from(STORAGE_BUCKET)
+              .upload(storagePath, file, { upsert: false });
+            if (error) throw new Error(`Unable to upload ${key}: ${error.message}`);
+            uploadedPaths[key] = storagePath;
+          }
+        } catch (error) {
+          if (
+            process.env.NODE_ENV === "development" &&
+            error instanceof Error &&
+            error.message.includes("Bucket not found")
+          ) {
+            const formData = new FormData();
+            formData.append("questionPaper", questionPaper);
+            formData.append("answerSheet", answerSheet);
+            const res = await fetch("/api/exams", { method: "POST", body: formData });
+            const data = await readApiResponse(res);
+            if (!res.ok) {
+              throw new Error(data.error || "Failed to start assessment extraction job.");
+            }
+            router.push(`/exams/${data.jobId}/processing`);
+            return;
+          }
+
+          if (uploadedPaths.questionPaper) {
+            await supabase.storage.from(STORAGE_BUCKET).remove(Object.values(uploadedPaths));
+          }
+          throw error;
+        }
+
+        const res = await fetch("/api/exams", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            questionPaperPath: uploadedPaths.questionPaper,
+            answerSheetPath: uploadedPaths.answerSheet,
+          }),
+        });
         const data = await readApiResponse(res);
         if (!res.ok) {
           throw new Error(data.error || "Failed to start assessment extraction job.");
