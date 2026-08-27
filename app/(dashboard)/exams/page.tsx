@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { Sparkles, ArrowRight, PlayCircle, ShieldCheck } from "lucide-react";
 import { FileUploadCard } from "@/components/upload/FileUploadCard";
 import { UploadedFileCard } from "@/components/upload/UploadedFileCard";
+import { createClient } from "@/utils/supabase/client";
+
+const STORAGE_BUCKET = "assessment-files";
 
 export default function ExamsUploadPage() {
   const router = useRouter();
@@ -22,28 +25,65 @@ export default function ExamsUploadPage() {
     setSubmitError(null);
 
     try {
-      const formData = new FormData();
       if (isDemo) {
-        formData.append("demo", "true");
+        const res = await fetch("/api/exams", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ demo: true }),
+        });
+        const data = await readApiResponse(res);
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to start assessment extraction job.");
+        }
+        router.push(`/exams/${data.jobId}/processing`);
+        return;
       } else {
         if (!questionPaper || !answerSheet) return;
-        formData.append("questionPaper", questionPaper);
-        formData.append("answerSheet", answerSheet);
+        const supabase = createClient();
+        const uploadId = crypto.randomUUID();
+        const files = [
+          { file: questionPaper, key: "questionPaper" },
+          { file: answerSheet, key: "answerSheet" },
+        ];
+        const uploadedPaths: Record<string, string> = {};
+
+        try {
+          for (const { file, key } of files) {
+            const storagePath = `${uploadId}/${key}-${file.name}`;
+            const { error } = await supabase.storage
+              .from(STORAGE_BUCKET)
+              .upload(storagePath, file, { upsert: false });
+            if (error) throw new Error(`Unable to upload ${key}: ${error.message}`);
+            uploadedPaths[key] = storagePath;
+          }
+        } catch (storageError) {
+          if (!(storageError instanceof Error) || !storageError.message.includes("Bucket not found")) {
+            throw storageError;
+          }
+
+          const formData = new FormData();
+          formData.append("questionPaper", questionPaper);
+          formData.append("answerSheet", answerSheet);
+          const res = await fetch("/api/exams", { method: "POST", body: formData });
+          const data = await readApiResponse(res);
+          if (!res.ok) {
+            throw new Error(data.error || "Failed to start assessment extraction job.");
+          }
+          router.push(`/exams/${data.jobId}/processing`);
+          return;
+        }
+
+        const res = await fetch("/api/exams", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ files: uploadedPaths }),
+        });
+        const data = await readApiResponse(res);
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to start assessment extraction job.");
+        }
+        router.push(`/exams/${data.jobId}/processing`);
       }
-
-      const res = await fetch("/api/exams", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to start assessment extraction job.");
-      }
-
-      // Navigate to processing screen
-      router.push(`/exams/${data.jobId}/processing`);
     } catch (err) {
       console.error("Upload error:", err);
       setSubmitError(
@@ -52,6 +92,21 @@ export default function ExamsUploadPage() {
       setIsSubmitting(false);
     }
   };
+
+  async function readApiResponse(
+    res: Response
+  ): Promise<{ error?: string; jobId?: string }> {
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      const message = (await res.text()).trim();
+      throw new Error(
+        res.status === 413
+          ? "The selected files are too large for this deployment. Configure the assessment-files storage bucket and try again."
+          : message || `Upload failed (${res.status}).`
+      );
+    }
+    return res.json();
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 select-none">

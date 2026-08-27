@@ -216,6 +216,8 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
 ```
 
+For production uploads, create a private Supabase Storage bucket named `assessment-files` and allow authenticated users to insert and read objects in that bucket. The browser uploads files directly to Storage, then the `/api/exams` route downloads them for processing. This avoids Vercel's serverless request-body limit.
+
 For the currently active local AI adapter, use:
 
 ```env
