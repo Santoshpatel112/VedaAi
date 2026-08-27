@@ -8,10 +8,9 @@ import { UploadedFileCard } from "@/components/upload/UploadedFileCard";
 import { createClient } from "@/utils/supabase/client";
 
 const STORAGE_BUCKET = "assessment-files";
-const hasStorageConfig = Boolean(
-  process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-);
+// Upload through the server route so production does not require a public
+// browser Storage bucket or client-side Storage policies.
+const hasStorageConfig = false;
 
 export default function ExamsUploadPage() {
   const router = useRouter();
@@ -43,10 +42,6 @@ export default function ExamsUploadPage() {
         return;
       } else {
         if (!questionPaper || !answerSheet) return;
-        if (!hasStorageConfig && process.env.NODE_ENV !== "development") {
-          throw new Error("Production file storage is not configured.");
-        }
-
         if (!hasStorageConfig) {
           const formData = new FormData();
           formData.append("questionPaper", questionPaper);

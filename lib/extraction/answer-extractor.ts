@@ -7,8 +7,8 @@ import { normalizeQuestionNumber } from "./question-number-detector";
  * and width/height are strictly positive.
  */
 export function validateAndNormalizeBBox(raw: BoundingBox): BoundingBox {
-  let x = Math.max(0, Math.min(0.95, Number.isFinite(raw.x) ? raw.x : 0.05));
-  let y = Math.max(0, Math.min(0.95, Number.isFinite(raw.y) ? raw.y : 0.05));
+  const x = Math.max(0, Math.min(0.95, Number.isFinite(raw.x) ? raw.x : 0.05));
+  const y = Math.max(0, Math.min(0.95, Number.isFinite(raw.y) ? raw.y : 0.05));
 
   let width = Number.isFinite(raw.width) ? raw.width : 0.88;
   let height = Number.isFinite(raw.height) ? raw.height : 0.20;

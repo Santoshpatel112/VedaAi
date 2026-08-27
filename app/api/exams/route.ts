@@ -1,20 +1,16 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { writeFile, mkdir } from "fs/promises";
+import os from "os";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { createJob } from "@/lib/jobs/job-store";
 import { validateFileUpload } from "@/lib/validation/schemas";
-import { createClient } from "@/utils/supabase/server";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const UPLOAD_DIR =
-  process.env.NODE_ENV === "production"
-    ? path.join("/tmp", "veda")
-    : process.env.UPLOAD_DIR ?? path.join(process.cwd(), "tmp", "veda");
-const STORAGE_BUCKET = "assessment-files";
+// Vercel only guarantees the OS temp directory at runtime. Never write under
+// the deployed bundle (/var/task) or depend on a pre-created storage bucket.
+const UPLOAD_DIR = path.join(os.tmpdir(), "veda");
 
 export async function POST(request: NextRequest) {
   const requestId = uuidv4();
@@ -24,40 +20,7 @@ export async function POST(request: NextRequest) {
     if (contentType.includes("application/json")) {
       const body = await request.json();
       if (body.demo === true) return await startDemoJob();
-
-      const questionPaperPath = body.questionPaperPath ?? body.files?.questionPaper;
-      const answerSheetPath = body.answerSheetPath ?? body.files?.answerSheet;
-      if (typeof questionPaperPath !== "string" || typeof answerSheetPath !== "string") {
-        return NextResponse.json({ error: "Uploaded file paths are required." }, { status: 400 });
-      }
-      if (!isValidStoragePath(questionPaperPath, "questionPaper") || !isValidStoragePath(answerSheetPath, "answerSheet")) {
-        return NextResponse.json({ error: "Invalid uploaded file path." }, { status: 400 });
-      }
-
-      const supabase = createClient(await cookies());
-      const jobId = uuidv4();
-      const jobDir = path.join(UPLOAD_DIR, jobId);
-      await mkdir(jobDir, { recursive: true });
-      const files = [
-        {
-          storagePath: questionPaperPath,
-          localPath: path.join(jobDir, `question_paper${path.extname(questionPaperPath)}`),
-        },
-        {
-          storagePath: answerSheetPath,
-          localPath: path.join(jobDir, `answer_sheet${path.extname(answerSheetPath)}`),
-        },
-      ];
-      for (const file of files) {
-        const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(file.storagePath);
-        if (error || !data) throw new Error(error?.message ?? "Unable to download uploaded file.");
-        const validation = validateFileUpload(path.basename(file.storagePath), data.type, data.size);
-        if (!validation.valid) throw new Error(validation.error);
-        await writeFile(file.localPath, Buffer.from(await data.arrayBuffer()));
-      }
-      createJob(jobId, files[0].localPath, files[1].localPath, false);
-      launchProcessing(jobId, files[0].localPath, files[1].localPath, false);
-      return NextResponse.json({ jobId, status: "queued", isDemo: false });
+      return NextResponse.json({ error: "Use multipart form data for uploaded files." }, { status: 400 });
     }
 
     const formData = await request.formData();
@@ -139,18 +102,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function isValidStoragePath(storagePath: string, fileKey: string): boolean {
-  const parts = storagePath.split("/");
-  if (parts.length !== 2 || !/^[0-9a-f-]{36}$/i.test(parts[0])) return false;
-  const filename = parts[1];
-  const extension = path.extname(filename).toLowerCase();
-  return (
-    filename.startsWith(`${fileKey}-`) &&
-    [".pdf", ".png", ".jpg", ".jpeg"].includes(extension) &&
-    !filename.includes("..")
-  );
 }
 
 function launchProcessing(
