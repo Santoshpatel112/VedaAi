@@ -11,10 +11,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const UPLOAD_DIR =
-  process.env.UPLOAD_DIR ??
-  (process.env.NODE_ENV === "production"
+  process.env.NODE_ENV === "production"
     ? path.join("/tmp", "veda")
-    : path.join(process.cwd(), "tmp", "veda"));
+    : process.env.UPLOAD_DIR ?? path.join(process.cwd(), "tmp", "veda");
 const STORAGE_BUCKET = "assessment-files";
 
 export async function POST(request: NextRequest) {
