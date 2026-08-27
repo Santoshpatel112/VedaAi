@@ -9,18 +9,24 @@ import { validateFileUpload } from "@/lib/validation/schemas";
 import { createClient } from "@/utils/supabase/server";
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(process.cwd(), "tmp", "veda");
+const STORAGE_BUCKET = "assessment-files";
 
 export async function POST(request: NextRequest) {
+  const requestId = uuidv4();
   try {
     const contentType = request.headers.get("content-type") ?? "";
+    console.info("POST /api/exams started", { requestId, contentType });
     if (contentType.includes("application/json")) {
       const body = await request.json();
       if (body.demo === true) return await startDemoJob();
 
-      const questionPaperPath = body.files?.questionPaper;
-      const answerSheetPath = body.files?.answerSheet;
+      const questionPaperPath = body.questionPaperPath ?? body.files?.questionPaper;
+      const answerSheetPath = body.answerSheetPath ?? body.files?.answerSheet;
       if (typeof questionPaperPath !== "string" || typeof answerSheetPath !== "string") {
         return NextResponse.json({ error: "Uploaded file paths are required." }, { status: 400 });
+      }
+      if (!isValidStoragePath(questionPaperPath, "questionPaper") || !isValidStoragePath(answerSheetPath, "answerSheet")) {
+        return NextResponse.json({ error: "Invalid uploaded file path." }, { status: 400 });
       }
 
       const supabase = createClient(await cookies());
@@ -38,7 +44,7 @@ export async function POST(request: NextRequest) {
         },
       ];
       for (const file of files) {
-        const { data, error } = await supabase.storage.from("assessment-files").download(file.storagePath);
+        const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(file.storagePath);
         if (error || !data) throw new Error(error?.message ?? "Unable to download uploaded file.");
         const validation = validateFileUpload(path.basename(file.storagePath), data.type, data.size);
         if (!validation.valid) throw new Error(validation.error);
@@ -48,7 +54,7 @@ export async function POST(request: NextRequest) {
       processExam(jobId, files[0].localPath, files[1].localPath, false).catch((err) =>
         console.error("Pipeline error:", err)
       );
-      return NextResponse.json({ jobId, isDemo: false });
+      return NextResponse.json({ jobId, status: "queued", isDemo: false });
     }
 
     const formData = await request.formData();
@@ -123,14 +129,26 @@ export async function POST(request: NextRequest) {
       console.error("Pipeline error:", err)
     );
 
-    return NextResponse.json({ jobId, isDemo: false });
+    return NextResponse.json({ jobId, status: "queued", isDemo: false });
   } catch (err) {
-    console.error("POST /api/exams error:", err);
+    console.error("POST /api/exams error:", { requestId, error: err });
     return NextResponse.json(
       { error: "An unexpected server error occurred. Please try again." },
       { status: 500 }
     );
   }
+}
+
+function isValidStoragePath(storagePath: string, fileKey: string): boolean {
+  const parts = storagePath.split("/");
+  if (parts.length !== 2 || !/^[0-9a-f-]{36}$/i.test(parts[0])) return false;
+  const filename = parts[1];
+  const extension = path.extname(filename).toLowerCase();
+  return (
+    filename.startsWith(`${fileKey}-`) &&
+    [".pdf", ".png", ".jpg", ".jpeg"].includes(extension) &&
+    !filename.includes("..")
+  );
 }
 
 async function startDemoJob() {
@@ -143,5 +161,5 @@ async function startDemoJob() {
   await writeFile(asPath, "demo");
   createJob(jobId, qpPath, asPath, true);
   processExam(jobId, qpPath, asPath, true).catch((err) => console.error("Demo pipeline error:", err));
-  return NextResponse.json({ jobId, isDemo: true });
+  return NextResponse.json({ jobId, status: "queued", isDemo: true });
 }

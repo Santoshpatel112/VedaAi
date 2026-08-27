@@ -83,6 +83,9 @@ export default function ExamsUploadPage() {
             !(storageError instanceof Error) ||
             !storageError.message.includes("Bucket not found")
           ) {
+            if (uploadedPaths.questionPaper) {
+              await supabase.storage.from(STORAGE_BUCKET).remove(Object.values(uploadedPaths));
+            }
             throw storageError;
           }
 
@@ -101,7 +104,10 @@ export default function ExamsUploadPage() {
         const res = await fetch("/api/exams", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ files: uploadedPaths }),
+          body: JSON.stringify({
+            questionPaperPath: uploadedPaths.questionPaper,
+            answerSheetPath: uploadedPaths.answerSheet,
+          }),
         });
         const data = await readApiResponse(res);
         if (!res.ok) {
@@ -122,15 +128,34 @@ export default function ExamsUploadPage() {
     res: Response
   ): Promise<{ error?: string; jobId?: string }> {
     const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/json")) {
-      const message = (await res.text()).trim();
+    const responseText = (await res.text()).trim();
+    console.info("POST /api/exams response", {
+      status: res.status,
+      contentType,
+      body: responseText.slice(0, 500),
+    });
+
+    if (!contentType.toLowerCase().includes("application/json") || !responseText) {
       throw new Error(
-        res.status === 413
-          ? "The selected files are too large for this deployment. Configure the assessment-files storage bucket and try again."
-          : message || `Upload failed (${res.status}).`
+        responseText || `Upload failed: server returned HTTP ${res.status}.`
       );
     }
-    return res.json();
+
+    try {
+      const data = JSON.parse(responseText) as { error?: string; jobId?: string };
+      if (!res.ok) {
+        throw new Error(data.error || `Upload failed: server returned HTTP ${res.status}.`);
+      }
+      if (!data.jobId) {
+        throw new Error("Upload started but the server did not return a job ID.");
+      }
+      return data;
+    } catch (error) {
+      if (error instanceof Error && !error.message.includes("Unexpected token")) {
+        throw error;
+      }
+      throw new Error(`Upload failed: server returned invalid JSON (HTTP ${res.status}).`);
+    }
   }
 
   return (
