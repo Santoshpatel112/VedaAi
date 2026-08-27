@@ -1,12 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { createJob } from "@/lib/jobs/job-store";
-import { processExam } from "@/lib/pipeline";
 import { validateFileUpload } from "@/lib/validation/schemas";
 import { createClient } from "@/utils/supabase/server";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(process.cwd(), "tmp", "veda");
 const STORAGE_BUCKET = "assessment-files";
@@ -51,9 +53,7 @@ export async function POST(request: NextRequest) {
         await writeFile(file.localPath, Buffer.from(await data.arrayBuffer()));
       }
       createJob(jobId, files[0].localPath, files[1].localPath, false);
-      processExam(jobId, files[0].localPath, files[1].localPath, false).catch((err) =>
-        console.error("Pipeline error:", err)
-      );
+      launchProcessing(jobId, files[0].localPath, files[1].localPath, false);
       return NextResponse.json({ jobId, status: "queued", isDemo: false });
     }
 
@@ -125,15 +125,14 @@ export async function POST(request: NextRequest) {
     createJob(jobId, qpPath, asPath, false);
 
     // Run pipeline async (don't await — return jobId immediately)
-    processExam(jobId, qpPath, asPath, false).catch((err) =>
-      console.error("Pipeline error:", err)
-    );
+    launchProcessing(jobId, qpPath, asPath, false);
 
     return NextResponse.json({ jobId, status: "queued", isDemo: false });
   } catch (err) {
     console.error("POST /api/exams error:", { requestId, error: err });
+    const message = err instanceof Error ? err.message : "Unknown server error";
     return NextResponse.json(
-      { error: "An unexpected server error occurred. Please try again." },
+      { error: message, requestId },
       { status: 500 }
     );
   }
@@ -151,6 +150,22 @@ function isValidStoragePath(storagePath: string, fileKey: string): boolean {
   );
 }
 
+function launchProcessing(
+  jobId: string,
+  questionPaperPath: string,
+  answerSheetPath: string,
+  isDemo: boolean
+): void {
+  after(async () => {
+    try {
+      const { processExam } = await import("@/lib/pipeline");
+      await processExam(jobId, questionPaperPath, answerSheetPath, isDemo);
+    } catch (error) {
+      console.error("Pipeline startup error:", { jobId, error });
+    }
+  });
+}
+
 async function startDemoJob() {
   const jobId = uuidv4();
   const jobDir = path.join(UPLOAD_DIR, jobId);
@@ -160,6 +175,6 @@ async function startDemoJob() {
   await writeFile(qpPath, "demo");
   await writeFile(asPath, "demo");
   createJob(jobId, qpPath, asPath, true);
-  processExam(jobId, qpPath, asPath, true).catch((err) => console.error("Demo pipeline error:", err));
+  launchProcessing(jobId, qpPath, asPath, true);
   return NextResponse.json({ jobId, status: "queued", isDemo: true });
 }
