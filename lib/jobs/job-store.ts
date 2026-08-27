@@ -1,6 +1,8 @@
 import type { ProcessingJob, ProcessingStageKey, JobStatus } from "@/lib/types";
 
-// In-memory job store (upgradeable to Redis)
+// In-memory state is retained for local development. Production deployments
+// should use a shared backing store for jobs; missing state is handled by the
+// API as an explicit error rather than leaving polling stuck forever.
 const jobs = new Map<string, ProcessingJob>();
 
 export function createJob(

@@ -1,5 +1,5 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { mkdtemp, writeFile } from "fs/promises";
+import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
@@ -7,10 +7,6 @@ import { createJob } from "@/lib/jobs/job-store";
 import { validateFileUpload } from "@/lib/validation/schemas";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// Vercel only guarantees the OS temp directory at runtime. Never write under
-// the deployed bundle (/var/task) or depend on a pre-created storage bucket.
-const UPLOAD_DIR = path.join(os.tmpdir(), "veda-");
 
 export async function POST(request: NextRequest) {
   const requestId = uuidv4();
@@ -66,24 +62,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Save files
+    // Save files under the OS temporary directory, which is the only writable
+    // location guaranteed by Vercel serverless functions.
     const jobId = uuidv4();
-    const jobDir = await mkdtemp(UPLOAD_DIR);
+    const jobDir = await fs.mkdtemp(path.join(os.tmpdir(), "veda-"));
 
     const qpExt = path.extname(questionPaperFile.name).toLowerCase();
     const asExt = path.extname(answerSheetFile.name).toLowerCase();
-
     const qpPath = path.join(jobDir, `question_paper${qpExt}`);
     const asPath = path.join(jobDir, `answer_sheet${asExt}`);
 
-    const [qpBuffer, asBuffer] = await Promise.all([
-      questionPaperFile.arrayBuffer(),
-      answerSheetFile.arrayBuffer(),
-    ]);
-
     await Promise.all([
-      writeFile(qpPath, Buffer.from(qpBuffer)),
-      writeFile(asPath, Buffer.from(asBuffer)),
+      fs.writeFile(qpPath, Buffer.from(await questionPaperFile.arrayBuffer())),
+      fs.writeFile(asPath, Buffer.from(await answerSheetFile.arrayBuffer())),
     ]);
 
     // Create job and kick off pipeline
@@ -121,11 +112,10 @@ function launchProcessing(
 
 async function startDemoJob() {
   const jobId = uuidv4();
-  const jobDir = await mkdtemp(UPLOAD_DIR);
-  const qpPath = path.join(jobDir, "question_paper.demo");
-  const asPath = path.join(jobDir, "answer_sheet.demo");
-  await writeFile(qpPath, "demo");
-  await writeFile(asPath, "demo");
+  // Demo processing is fully data-driven; it must not depend on files that
+  // can disappear between serverless invocations.
+  const qpPath = "";
+  const asPath = "";
   createJob(jobId, qpPath, asPath, true);
   launchProcessing(jobId, qpPath, asPath, true);
   return NextResponse.json({ jobId, status: "queued", isDemo: true });

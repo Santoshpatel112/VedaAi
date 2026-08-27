@@ -29,13 +29,17 @@ export async function processExam(
     // Stage 2: Rendering
     updateJobStage(jobId, "rendering", 12);
 
-    const [qpPageCountRaw, asPageCountRaw] = await Promise.all([
-      getPageCount(questionPaperPath),
-      getPageCount(answerSheetPath),
-    ]);
-
-    const qpPageCount = Math.max(qpPageCountRaw, 27);
-    const asPageCount = Math.max(asPageCountRaw, 31);
+    // Demo jobs use the bundled demo dataset and must not read ephemeral
+    // placeholder files, which may not exist on a different serverless instance.
+    const [qpPageCount, asPageCount] = isDemo
+      ? [27, 31]
+      : await Promise.all([
+          getPageCount(questionPaperPath),
+          getPageCount(answerSheetPath),
+        ]).then(([questionPages, answerPages]) => [
+          Math.max(questionPages, 27),
+          Math.max(answerPages, 31),
+        ]);
 
     // Stage 3: Extract questions from question paper
     updateJobStage(jobId, "extracting_questions", 28);
@@ -57,7 +61,14 @@ export async function processExam(
     // Stage 5: Extract answers from answer sheet
     updateJobStage(jobId, "extracting_answers", 52);
 
-    const rawAnswers = await extractAnswersFromPdf(answerSheetPath, rawQuestions);
+    const rawAnswers = isDemo
+      ? rawQuestions.map((question) => ({
+          questionNumber: question.number,
+          text: "Demo answer",
+          regions: [],
+          confidence: 0.98,
+        }))
+      : await extractAnswersFromPdf(answerSheetPath, rawQuestions);
 
     // Stage 6: Parse answers
     updateJobStage(jobId, "reading_handwriting", 62);
