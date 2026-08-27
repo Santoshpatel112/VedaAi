@@ -8,6 +8,10 @@ import { UploadedFileCard } from "@/components/upload/UploadedFileCard";
 import { createClient } from "@/utils/supabase/client";
 
 const STORAGE_BUCKET = "assessment-files";
+const hasStorageConfig = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+);
 
 export default function ExamsUploadPage() {
   const router = useRouter();
@@ -39,6 +43,23 @@ export default function ExamsUploadPage() {
         return;
       } else {
         if (!questionPaper || !answerSheet) return;
+        if (!hasStorageConfig && process.env.NODE_ENV !== "development") {
+          throw new Error("Production file storage is not configured.");
+        }
+
+        if (!hasStorageConfig) {
+          const formData = new FormData();
+          formData.append("questionPaper", questionPaper);
+          formData.append("answerSheet", answerSheet);
+          const res = await fetch("/api/exams", { method: "POST", body: formData });
+          const data = await readApiResponse(res);
+          if (!res.ok) {
+            throw new Error(data.error || "Failed to start assessment extraction job.");
+          }
+          router.push(`/exams/${data.jobId}/processing`);
+          return;
+        }
+
         const supabase = createClient();
         const uploadId = crypto.randomUUID();
         const files = [
@@ -57,7 +78,11 @@ export default function ExamsUploadPage() {
             uploadedPaths[key] = storagePath;
           }
         } catch (storageError) {
-          if (!(storageError instanceof Error) || !storageError.message.includes("Bucket not found")) {
+          if (
+            process.env.NODE_ENV !== "development" ||
+            !(storageError instanceof Error) ||
+            !storageError.message.includes("Bucket not found")
+          ) {
             throw storageError;
           }
 

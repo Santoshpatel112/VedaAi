@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
       for (const file of files) {
         const { data, error } = await supabase.storage.from("assessment-files").download(file.storagePath);
         if (error || !data) throw new Error(error?.message ?? "Unable to download uploaded file.");
+        const validation = validateFileUpload(path.basename(file.storagePath), data.type, data.size);
+        if (!validation.valid) throw new Error(validation.error);
         await writeFile(file.localPath, Buffer.from(await data.arrayBuffer()));
       }
       createJob(jobId, files[0].localPath, files[1].localPath, false);
