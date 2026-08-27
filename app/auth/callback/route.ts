@@ -3,9 +3,11 @@ import { setSession, type UserSession } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
+  const tokenHash = request.nextUrl.searchParams.get("token_hash");
+  const tokenType = request.nextUrl.searchParams.get("type") || "signup";
   const redirectUrl = new URL("/login", request.url);
 
-  if (!code) {
+  if (!code && !tokenHash) {
     redirectUrl.searchParams.set(
       "error",
       "The confirmation link is missing or has expired."
@@ -27,7 +29,12 @@ export async function GET(request: NextRequest) {
 
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = code
+      ? await supabase.auth.exchangeCodeForSession(code)
+      : await supabase.auth.verifyOtp({
+          token_hash: tokenHash!,
+          type: tokenType as "signup" | "email" | "recovery" | "invite",
+        });
 
     if (error || !data.user) {
       redirectUrl.searchParams.set(

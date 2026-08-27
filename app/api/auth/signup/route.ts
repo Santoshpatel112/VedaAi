@@ -55,12 +55,23 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ success: true, user });
         }
 
+        if (!error && data?.user && !data.session && data.user.identities?.length === 0) {
+          return NextResponse.json(
+            {
+              error:
+                "An account with this email already exists. Use Log In instead, or resend the confirmation email if the account is not confirmed.",
+              accountExists: true,
+            },
+            { status: 409 }
+          );
+        }
+
         if (!error && data?.user && !data.session) {
           return NextResponse.json({
             success: true,
             requiresEmailConfirmation: true,
             message:
-              "Account created. Please confirm your email before signing in.",
+              "Account created. Check your email to confirm your account.",
           });
         }
 
@@ -82,6 +93,10 @@ export async function POST(request: NextRequest) {
         }
       } catch (supabaseErr) {
         console.error("Supabase signup error:", supabaseErr);
+        return NextResponse.json(
+          { error: "Unable to contact Supabase. Check your connection and try again." },
+          { status: 503 }
+        );
       }
     }
 

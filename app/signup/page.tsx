@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Lock, Mail, User } from "lucide-react";
@@ -13,23 +13,15 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [retrySeconds, setRetrySeconds] = useState(0);
-
-  useEffect(() => {
-    if (retrySeconds <= 0) return;
-
-    const timer = window.setInterval(() => {
-      setRetrySeconds((seconds) => Math.max(0, seconds - 1));
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [retrySeconds]);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendDisabled, setResendDisabled] = useState(false);
+  const [accountPending, setAccountPending] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (retrySeconds > 0) return;
     setError(null);
     setNotice(null);
+    setAccountPending(false);
     setLoading(true);
 
     try {
@@ -42,13 +34,14 @@ export default function SignupPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        if (res.status === 429) {
-          setRetrySeconds(60);
+        if (res.status === 409 && data.accountExists) {
+          setAccountPending(true);
         }
         throw new Error(data.error || "Failed to create account.");
       }
 
       if (data.requiresEmailConfirmation) {
+        setAccountPending(true);
         setNotice(`${data.message} Then return here and use Log In.`);
         setLoading(false);
         return;
@@ -58,6 +51,35 @@ export default function SignupPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed.");
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendLoading || resendDisabled || !email) return;
+
+    setError(null);
+    setNotice(null);
+    setResendLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 429) setResendDisabled(true);
+        throw new Error(data.error || "Unable to resend confirmation email.");
+      }
+
+      setNotice(data.message);
+      setResendDisabled(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to resend confirmation email.");
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -85,6 +107,31 @@ export default function SignupPage() {
         {notice && (
           <div className="p-3.5 rounded-xl bg-[#FFF3EE] border border-[#FFCCAA] text-[#C2410C] text-xs font-semibold">
             {notice}
+          </div>
+        )}
+
+        {accountPending && (
+          <div className="space-y-3 rounded-xl border border-[#FFCCAA] bg-[#FFF3EE] p-3.5">
+            <p className="text-xs font-semibold text-[#C2410C]">
+              Confirmation is pending for {email}. Check your inbox or spam folder.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendLoading || resendDisabled}
+                className="text-xs font-black text-[#FF5500] underline disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {resendLoading
+                  ? "Sending..."
+                  : resendDisabled
+                  ? "Email request sent"
+                  : "Resend confirmation email"}
+              </button>
+              <Link href="/login" className="text-xs font-black text-[#21262C] underline">
+                Go to Log In
+              </Link>
+            </div>
           </div>
         )}
 
@@ -142,13 +189,11 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading || retrySeconds > 0}
+            disabled={loading || accountPending}
             className="w-full py-3.5 rounded-2xl bg-[#FF5500] hover:bg-[#E04A00] text-white font-black text-sm shadow-md transition-all flex items-center justify-center gap-2"
           >
             {loading ? (
               <span>Creating Account...</span>
-            ) : retrySeconds > 0 ? (
-              <span>Try again in {retrySeconds}s</span>
             ) : (
               <>
                 <span>Create Teacher Account</span>
