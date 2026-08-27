@@ -241,6 +241,8 @@ CONFIDENCE_HIGH=0.82
 CONFIDENCE_MEDIUM=0.55
 ```
 
+In Vercel Production, leave `UPLOAD_DIR` unset so temporary processing files use the writable `/tmp/veda` directory. Vercel's deployed application directory is read-only.
+
 ## Useful Commands
 
 ```bash
