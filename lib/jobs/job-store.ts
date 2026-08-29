@@ -25,6 +25,33 @@ export function createJob(
   return job;
 }
 
+/**
+ * Create a job with file buffers for memory-based processing (Vercel-safe)
+ */
+export function createJobWithBuffers(
+  id: string,
+  questionPaperBuffer: Buffer,
+  answerSheetBuffer: Buffer,
+  questionPaperMimeType: string,
+  answerSheetMimeType: string,
+  isDemo = false
+): ProcessingJob {
+  const job: ProcessingJob = {
+    id,
+    status: "queued",
+    stage: "uploading",
+    progress: 0,
+    createdAt: Date.now(),
+    questionPaperBuffer,
+    answerSheetBuffer,
+    questionPaperMimeType,
+    answerSheetMimeType,
+    isDemo,
+  };
+  jobs.set(id, job);
+  return job;
+}
+
 export function getJob(id: string): ProcessingJob | undefined {
   return jobs.get(id);
 }

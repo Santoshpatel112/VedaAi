@@ -30,6 +30,8 @@ export function AnswerSheetViewer({
   const [error, setError] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<"pdf" | "image" | "svg">("pdf");
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  // Incremented to force a retry of the current page without changing jobId/currentPage
+  const [retryCount, setRetryCount] = useState(0);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -66,6 +68,8 @@ export function AnswerSheetViewer({
   // Load and render page document (PDF canvas or Image)
   useEffect(() => {
     let isMounted = true;
+    // Track the URL created in this effect so we can revoke it on cleanup
+    let createdUrl: string | null = null;
 
     async function fetchAndRender() {
       try {
@@ -83,10 +87,10 @@ export function AnswerSheetViewer({
 
         if (contentType.includes("pdf")) {
           if (!isMounted) return;
-          setMediaType("pdf");
           const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          setMediaUrl(url);
+          createdUrl = URL.createObjectURL(blob);
+          setMediaType("pdf");
+          setMediaUrl(createdUrl);
 
           // Render PDF page via pdfjs-dist using local worker
           try {
@@ -114,15 +118,17 @@ export function AnswerSheetViewer({
           }
         } else if (contentType.includes("svg")) {
           if (!isMounted) return;
-          setMediaType("svg");
           const text = await res.text();
-          const blob = new Blob([text], { type: "image/svg+xml" });
-          setMediaUrl(URL.createObjectURL(blob));
+          const svgBlob = new Blob([text], { type: "image/svg+xml" });
+          createdUrl = URL.createObjectURL(svgBlob);
+          setMediaType("svg");
+          setMediaUrl(createdUrl);
         } else {
           if (!isMounted) return;
-          setMediaType("image");
           const blob = await res.blob();
-          setMediaUrl(URL.createObjectURL(blob));
+          createdUrl = URL.createObjectURL(blob);
+          setMediaType("image");
+          setMediaUrl(createdUrl);
         }
 
         if (isMounted) setLoading(false);
@@ -139,8 +145,12 @@ export function AnswerSheetViewer({
 
     return () => {
       isMounted = false;
+      // Revoke any Object URL created in this effect to prevent memory leaks
+      if (createdUrl) {
+        URL.revokeObjectURL(createdUrl);
+      }
     };
-  }, [jobId, currentPage]);
+  }, [jobId, currentPage, retryCount]);
 
   // Regions on the current page
   const pageRegions =
@@ -184,10 +194,7 @@ export function AnswerSheetViewer({
             </h3>
             <p className="text-xs text-[#606266]">{error}</p>
             <button
-              onClick={() => {
-                setLoading(true);
-                setError(null);
-              }}
+              onClick={() => setRetryCount((c) => c + 1)}
               className="px-4 py-2 rounded-xl bg-[#FF5500] text-white text-xs font-bold shadow-xs hover:bg-[#E04A00]"
             >
               Retry Loading Page

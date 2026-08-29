@@ -1,5 +1,3 @@
-import fs from "fs/promises";
-import path from "path";
 import type { DocumentPage } from "@/lib/types";
 
 /**
@@ -13,19 +11,32 @@ import type { DocumentPage } from "@/lib/types";
 export async function renderDocumentToPages(
   filePath: string,
   mimeType: string
+): Promise<DocumentPage[]>;
+export async function renderDocumentToPages(
+  fileBuffer: Buffer,
+  mimeType: string
+): Promise<DocumentPage[]>;
+export async function renderDocumentToPages(
+  filePathOrBuffer: string | Buffer,
+  mimeType: string
 ): Promise<DocumentPage[]> {
-  const ext = path.extname(filePath).toLowerCase();
-  const isPdf = ext === ".pdf" || mimeType.includes("pdf");
+  const isPdf = mimeType.includes("pdf");
 
   if (isPdf) {
-    return renderPdfToPages(filePath);
+    return renderPdfToPages(filePathOrBuffer);
   } else {
-    return renderImageToPage(filePath);
+    return renderImageToPage(filePathOrBuffer);
   }
 }
 
-async function renderPdfToPages(filePath: string): Promise<DocumentPage[]> {
-  const pdfBytes = await fs.readFile(filePath);
+async function renderPdfToPages(filePathOrBuffer: string | Buffer): Promise<DocumentPage[]> {
+  let pdfBytes: Buffer;
+  if (Buffer.isBuffer(filePathOrBuffer)) {
+    pdfBytes = filePathOrBuffer;
+  } else {
+    const fs = await import("fs/promises");
+    pdfBytes = await fs.readFile(filePathOrBuffer);
+  }
   const base64 = pdfBytes.toString("base64");
 
   // For GPT-4o: send the whole PDF as a single "page" with base64
@@ -42,8 +53,14 @@ async function renderPdfToPages(filePath: string): Promise<DocumentPage[]> {
   ];
 }
 
-async function renderImageToPage(filePath: string): Promise<DocumentPage[]> {
-  const imageBytes = await fs.readFile(filePath);
+async function renderImageToPage(filePathOrBuffer: string | Buffer): Promise<DocumentPage[]> {
+  let imageBytes: Buffer;
+  if (Buffer.isBuffer(filePathOrBuffer)) {
+    imageBytes = filePathOrBuffer;
+  } else {
+    const fs = await import("fs/promises");
+    imageBytes = await fs.readFile(filePathOrBuffer);
+  }
   const base64 = imageBytes.toString("base64");
 
   return [
@@ -60,27 +77,45 @@ async function renderImageToPage(filePath: string): Promise<DocumentPage[]> {
  * Get the MIME type for a base64 image based on file extension.
  */
 export function getMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
+  const ext = filePath.split('.').pop()?.toLowerCase();
   const mimeMap: Record<string, string> = {
-    ".pdf": "application/pdf",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
+    "pdf": "application/pdf",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
   };
-  return mimeMap[ext] ?? "application/octet-stream";
+  return mimeMap[ext || ""] ?? "application/octet-stream";
 }
 
 /**
  * Count pages in a document (returns 1 for images, estimates for PDF).
  * Used for the UI page navigator.
  */
-export async function getPageCount(filePath: string): Promise<number> {
-  const ext = path.extname(filePath).toLowerCase();
+export async function getPageCount(filePath: string): Promise<number>;
+export async function getPageCount(fileBuffer: Buffer, mimeType: string): Promise<number>;
+export async function getPageCount(filePathOrBuffer: string | Buffer, mimeType?: string): Promise<number> {
+  let isPdf: boolean;
+  let bytes: Buffer;
+  
+  if (Buffer.isBuffer(filePathOrBuffer)) {
+    bytes = filePathOrBuffer;
+    isPdf = mimeType?.includes("pdf") ?? false;
+  } else {
+    const ext = filePathOrBuffer.split('.').pop()?.toLowerCase();
+    isPdf = ext === "pdf";
+    if (!isPdf) return 1;
+    
+    try {
+      const fs = await import("fs/promises");
+      bytes = await fs.readFile(filePathOrBuffer);
+    } catch {
+      return 1;
+    }
+  }
 
-  if (ext !== ".pdf") return 1;
+  if (!isPdf) return 1;
 
   try {
-    const bytes = await fs.readFile(filePath);
     const pdfStr = bytes.toString("binary");
 
     // Count /Page objects in PDF (rough estimate)
@@ -105,19 +140,39 @@ export async function getPageCount(filePath: string): Promise<number> {
 export async function getPageImageBase64(
   filePath: string,
   _pageNumber: number
+): Promise<string | null>;
+export async function getPageImageBase64(
+  fileBuffer: Buffer,
+  _pageNumber: number,
+  mimeType: string
+): Promise<string | null>;
+export async function getPageImageBase64(
+  filePathOrBuffer: string | Buffer,
+  _pageNumber: number,
+  mimeType?: string
 ): Promise<string | null> {
   try {
-    const ext = path.extname(filePath).toLowerCase();
+    let bytes: Buffer;
+    let isPdf: boolean;
+    
+    if (Buffer.isBuffer(filePathOrBuffer)) {
+      bytes = filePathOrBuffer;
+      isPdf = mimeType?.includes("pdf") ?? false;
+    } else {
+      const ext = filePathOrBuffer.split('.').pop()?.toLowerCase();
+      isPdf = ext === "pdf";
+      
+      const fs = await import("fs/promises");
+      bytes = await fs.readFile(filePathOrBuffer);
+    }
 
-    if (ext !== ".pdf") {
+    if (!isPdf) {
       // Single page image
-      const bytes = await fs.readFile(filePath);
       return bytes.toString("base64");
     }
 
     // For PDF: return the full PDF as base64
     // The frontend will use pdfjs-dist to render individual pages
-    const bytes = await fs.readFile(filePath);
     return bytes.toString("base64");
   } catch {
     return null;

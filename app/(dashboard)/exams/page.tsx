@@ -2,12 +2,12 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, ArrowRight, PlayCircle, ShieldCheck } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { FileUploadCard } from "@/components/upload/FileUploadCard";
 import { UploadedFileCard } from "@/components/upload/UploadedFileCard";
 import { createClient } from "@/utils/supabase/client";
 
-const STORAGE_BUCKET = "assessment-files";
+const STORAGE_BUCKET = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "assessment-files";
 const hasStorageConfig = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
@@ -74,11 +74,24 @@ export default function ExamsUploadPage() {
             uploadedPaths[key] = storagePath;
           }
         } catch (error) {
-          if (
-            process.env.NODE_ENV === "development" &&
+          // If Supabase Storage is unavailable or the bucket is missing/misconfigured,
+          // fall back to sending files directly via the multipart route.
+          // This fallback applies in ALL environments (dev and production).
+          const isStorageError =
             error instanceof Error &&
-            error.message.includes("Bucket not found")
-          ) {
+            (error.message.includes("Bucket not found") ||
+              error.message.toLowerCase().includes("storage") ||
+              error.message.toLowerCase().includes("bucket"));
+
+          if (isStorageError) {
+            console.warn("Supabase Storage unavailable, falling back to direct upload:", error);
+            // Best-effort cleanup of any partial uploads
+            if (Object.keys(uploadedPaths).length > 0) {
+              await supabase.storage
+                .from(STORAGE_BUCKET)
+                .remove(Object.values(uploadedPaths))
+                .catch(() => {});
+            }
             const formData = new FormData();
             formData.append("questionPaper", questionPaper);
             formData.append("answerSheet", answerSheet);
@@ -91,8 +104,12 @@ export default function ExamsUploadPage() {
             return;
           }
 
-          if (uploadedPaths.questionPaper) {
-            await supabase.storage.from(STORAGE_BUCKET).remove(Object.values(uploadedPaths));
+          // Non-storage error — clean up any partial uploads and rethrow
+          if (Object.keys(uploadedPaths).length > 0) {
+            await supabase.storage
+              .from(STORAGE_BUCKET)
+              .remove(Object.values(uploadedPaths))
+              .catch(() => {});
           }
           throw error;
         }
@@ -155,110 +172,126 @@ export default function ExamsUploadPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 select-none">
-      {/* Page Header */}
-      <div className="bg-white border border-[#E2E2E2] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2 max-w-xl">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFF3EE] border border-[#FFCCAA] text-[#FF5500] text-xs font-extrabold tracking-wide uppercase">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>AI Assessment Extraction</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-[#21262C] tracking-tight">
-            Upload Question Paper & Answer Sheet
+    <div className="min-h-[calc(100vh-56px)] flex flex-col items-center justify-start pt-12 pb-10 px-4 select-none">
+      <div className="w-full max-w-[880px]">
+
+        {/* ── Page title — Figma exact match ── */}
+        <div className="text-center mb-3">
+          <h1 className="text-[32px] leading-tight tracking-tight mb-2">
+            <span className="font-normal text-[#1A1A1A]">Upload </span>
+            <span className="font-black text-[#FF5500]">Question Paper & Answer Sheets</span>
           </h1>
-          <p className="text-xs sm:text-sm text-[#606266] leading-relaxed">
-            Upload printed question paper and handwritten student answer sheet. AI will automatically extract questions, detect student answers, and generate exact spatial highlighting.
-          </p>
+          <p className="text-sm text-[#666666] font-normal">Upload both files to get started</p>
         </div>
 
-        {/* Demo Assessment Showcase Button */}
-        <div className="shrink-0">
+        {/* ── Avatar with orbiting dots — Figma exact ── */}
+        <div className="flex justify-center mb-10">
+          <div className="relative w-[110px] h-[110px]">
+            {/* Pink/coral gradient background */}
+            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#FFB8A0] via-[#FFCBB8] to-[#FFD8C8] opacity-30 blur-2xl" />
+            {/* Avatar */}
+            <div className="relative w-[110px] h-[110px] rounded-full bg-gradient-to-br from-[#FFB8A0] to-[#FFD8C8] border-[3px] border-white shadow-md flex items-center justify-center overflow-hidden">
+              <span className="text-[52px] select-none">👩‍🏫</span>
+            </div>
+            {/* Orbiting orange dots */}
+            <span className="absolute top-[-2px] right-[22px] w-3 h-3 rounded-full bg-[#FF5500] border-[2.5px] border-white shadow-sm" />
+            <span className="absolute top-[24px] right-[2px] w-2.5 h-2.5 rounded-full bg-[#FF5500] border-[2px] border-white shadow-sm" />
+            <span className="absolute bottom-[16px] right-[2px] w-2 h-2 rounded-full bg-[#FF7733] border-[1.5px] border-white" />
+            <span className="absolute bottom-[-2px] left-[24px] w-2.5 h-2.5 rounded-full bg-[#FF5500] border-[2px] border-white shadow-sm" />
+            <span className="absolute top-[26px] left-[2px] w-2 h-2 rounded-full bg-[#FF7733] border-[1.5px] border-white" />
+          </div>
+        </div>
+
+        {/* ── Single white container — Figma exact ── */}
+        <div className="bg-white rounded-[24px] border-[2.5px] border-dashed border-[#D5D5D5] p-10 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Question Paper */}
+            {questionPaper ? (
+              <UploadedFileCard
+                label="Question Paper"
+                file={questionPaper}
+                onRemove={() => setQuestionPaper(null)}
+              />
+            ) : (
+              <FileUploadCard
+                title="Question Paper"
+                subtitle="PDF, PNG, JPG (up to 20MB)"
+                onFileSelect={(file) => {
+                  setQuestionPaper(file);
+                  setQpError(null);
+                }}
+                error={qpError}
+                disabled={isSubmitting}
+              />
+            )}
+
+            {/* Answer Sheet */}
+            {answerSheet ? (
+              <UploadedFileCard
+                label="Answer Sheet"
+                file={answerSheet}
+                onRemove={() => setAnswerSheet(null)}
+              />
+            ) : (
+              <FileUploadCard
+                title="Answer Sheet"
+                subtitle="PDF, PNG, JPG (up to 20MB)"
+                onFileSelect={(file) => {
+                  setAnswerSheet(file);
+                  setAsError(null);
+                }}
+                error={asError}
+                disabled={isSubmitting}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Error */}
+        {submitError && (
+          <div className="mt-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold text-center">
+            {submitError}
+          </div>
+        )}
+
+        {/* ── Start Mapping button + caption — Figma exact ── */}
+        <div className="flex flex-col items-center gap-2.5 mt-7">
+          <button
+            onClick={() => handleStartMapping(false)}
+            disabled={!canStartMapping}
+            className={`px-9 py-3 rounded-full font-semibold text-[15px] flex items-center gap-2.5 transition-all duration-150 ${
+              canStartMapping
+                ? "bg-[#2A2A2A] hover:bg-[#1A1A1A] text-white shadow-lg"
+                : "bg-[#E5E5E5] text-[#AAAAAA] cursor-not-allowed shadow-none"
+            }`}
+          >
+            {isSubmitting ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Starting…</span>
+              </>
+            ) : (
+              <>
+                <span>Start Mapping</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+
+          <p className="text-[11.5px] text-[#999999] text-center mt-0.5 font-normal">
+            Once both files are uploaded, you&apos;ll able to map answers with questions
+          </p>
+
+          {/* Demo button - hidden but functional */}
           <button
             onClick={() => handleStartMapping(true)}
             disabled={isSubmitting}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-[#FFF3EE] hover:bg-[#FFE6D5] text-[#FF5500] border border-[#FFCCAA] font-bold text-xs shadow-2xs transition-all duration-150 group"
+            className="text-xs text-[#AAAAAA] hover:text-[#FF5500] transition-colors underline underline-offset-2 mt-1 disabled:opacity-50"
           >
-            <PlayCircle className="w-4 h-4 text-[#FF5500] group-hover:scale-110 transition-transform" />
-            <span>Try Demo Assessment</span>
+            Or try a Demo Assessment
           </button>
         </div>
-      </div>
 
-      {/* Upload Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Question Paper Zone */}
-        {questionPaper ? (
-          <UploadedFileCard
-            label="Question Paper"
-            file={questionPaper}
-            onRemove={() => setQuestionPaper(null)}
-          />
-        ) : (
-          <FileUploadCard
-            title="Question Paper"
-            subtitle="Upload printed test / exam question paper (PDF or Image)"
-            onFileSelect={(file) => {
-              setQuestionPaper(file);
-              setQpError(null);
-            }}
-            error={qpError}
-            disabled={isSubmitting}
-          />
-        )}
-
-        {/* Answer Sheet Zone */}
-        {answerSheet ? (
-          <UploadedFileCard
-            label="Student Answer Sheet"
-            file={answerSheet}
-            onRemove={() => setAnswerSheet(null)}
-          />
-        ) : (
-          <FileUploadCard
-            title="Answer Sheet"
-            subtitle="Upload handwritten student answer sheet (PDF or Image)"
-            onFileSelect={(file) => {
-              setAnswerSheet(file);
-              setAsError(null);
-            }}
-            error={asError}
-            disabled={isSubmitting}
-          />
-        )}
-      </div>
-
-      {/* General Submit Error */}
-      {submitError && (
-        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold">
-          {submitError}
-        </div>
-      )}
-
-      {/* Start Mapping Action Button */}
-      <div className="bg-white border border-[#E2E2E2] rounded-3xl p-6 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-2 text-xs text-[#8C8C8C] font-medium">
-          <ShieldCheck className="w-4 h-4 text-[#22C55E]" />
-          <span>Files are encrypted and processed securely.</span>
-        </div>
-
-        <button
-          onClick={() => handleStartMapping(false)}
-          disabled={!canStartMapping}
-          className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all duration-200 shadow-md ${
-            canStartMapping
-              ? "bg-[#FF5500] hover:bg-[#E04A00] text-white hover:shadow-lg active:scale-98"
-              : "bg-[#E2E2E2] text-[#8C8C8C] cursor-not-allowed shadow-none"
-          }`}
-        >
-          {isSubmitting ? (
-            <span>Starting Mapping...</span>
-          ) : (
-            <>
-              <span>Start Mapping</span>
-              <ArrowRight className="w-4 h-4" />
-            </>
-          )}
-        </button>
       </div>
     </div>
   );

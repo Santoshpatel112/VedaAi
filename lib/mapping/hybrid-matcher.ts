@@ -4,9 +4,20 @@ import type { SemanticSearchService } from "@/lib/retrieval/semantic-search";
 
 // ─── Configurable Thresholds ──────────────────────────────────────────────────
 
+function parseThreshold(value: string | undefined, fallback: number): number {
+  const parsed = parseFloat(value ?? String(fallback));
+  if (isNaN(parsed) || parsed < 0 || parsed > 1) {
+    console.warn(
+      `[HybridMatcher] Invalid threshold value "${value}", using fallback ${fallback}`
+    );
+    return fallback;
+  }
+  return parsed;
+}
+
 export const CONFIDENCE_THRESHOLDS = {
-  HIGH: parseFloat(process.env.CONFIDENCE_HIGH ?? "0.82"),
-  MEDIUM: parseFloat(process.env.CONFIDENCE_MEDIUM ?? "0.55"),
+  HIGH: parseThreshold(process.env.CONFIDENCE_HIGH, 0.82),
+  MEDIUM: parseThreshold(process.env.CONFIDENCE_MEDIUM, 0.55),
 } as const;
 
 // ─── Mapping Weights (configurable) ──────────────────────────────────────────

@@ -1,53 +1,101 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import fs from "fs/promises";
-import os from "os";
-import path from "path";
 import { v4 as uuidv4 } from "uuid";
-import { createJob } from "@/lib/jobs/job-store";
+import { createJob, createJobWithBuffers } from "@/lib/jobs/job-store";
 import { validateFileUpload } from "@/lib/validation/schemas";
-import { createClient } from "@/utils/supabase/server";
+import { createServiceClient } from "@/utils/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const STORAGE_BUCKET = "assessment-files";
+const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "assessment-files";
+
+/**
+ * Standardized error response helper
+ */
+function createErrorResponse(message: string, status: number, requestId?: string) {
+  return NextResponse.json(
+    { 
+      error: message,
+      ...(requestId && { requestId }),
+      timestamp: new Date().toISOString()
+    },
+    { status }
+  );
+}
 
 export async function POST(request: NextRequest) {
   const requestId = uuidv4();
   try {
     const contentType = request.headers.get("content-type") ?? "";
     console.info("POST /api/exams started", { requestId, contentType });
+    
     if (contentType.includes("application/json")) {
       const body = await request.json();
       if (body.demo === true) return await startDemoJob();
+      
       const questionPaperPath = body.questionPaperPath;
       const answerSheetPath = body.answerSheetPath;
+      
       if (
         typeof questionPaperPath !== "string" ||
         typeof answerSheetPath !== "string" ||
         !isValidStoragePath(questionPaperPath, "questionPaper") ||
         !isValidStoragePath(answerSheetPath, "answerSheet")
       ) {
-        return NextResponse.json({ error: "Invalid uploaded file paths." }, { status: 400 });
+        return createErrorResponse("Invalid uploaded file paths provided", 400, requestId);
       }
 
-      const supabase = createClient(await cookies());
+      // Use service client for downloading files from storage
+      const supabase = createServiceClient();
       const jobId = uuidv4();
-      const jobDir = await fs.mkdtemp(path.join(os.tmpdir(), "veda-"));
-      const files = [
-        { storagePath: questionPaperPath, localPath: path.join(jobDir, `question_paper${path.extname(questionPaperPath)}`) },
-        { storagePath: answerSheetPath, localPath: path.join(jobDir, `answer_sheet${path.extname(answerSheetPath)}`) },
-      ];
-      for (const file of files) {
-        const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(file.storagePath);
-        if (error || !data) throw new Error(error?.message || "Unable to download uploaded file from Storage.");
-        const validation = validateFileUpload(path.basename(file.storagePath), data.type, data.size);
-        if (!validation.valid) throw new Error(validation.error);
-        await fs.writeFile(file.localPath, Buffer.from(await data.arrayBuffer()));
+      
+      try {
+        console.info(`Downloading files from bucket ${STORAGE_BUCKET}`);
+        const downloadPromises = [
+          { key: "questionPaper", path: questionPaperPath },
+          { key: "answerSheet", path: answerSheetPath },
+        ].map(async ({ key, path }) => {
+          console.info(`Downloading ${path} from bucket ${STORAGE_BUCKET}`);
+          const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path);
+          if (error || !data) {
+            console.error(`Download error for ${path}:`, error);
+            throw new Error(error?.message || `Unable to download ${key} from Storage.`);
+          }
+          
+          const validation = validateFileUpload(path.split('/').pop() || '', data.type, data.size);
+          if (!validation.valid) throw new Error(`${key}: ${validation.error}`);
+          
+          return {
+            key,
+            buffer: Buffer.from(await data.arrayBuffer()),
+            mimeType: data.type,
+          };
+        });
+        
+        const downloadedFiles = await Promise.all(downloadPromises);
+        const questionPaper = downloadedFiles.find(f => f.key === "questionPaper")!;
+        const answerSheet = downloadedFiles.find(f => f.key === "answerSheet")!;
+        
+        // Create job with buffers (memory-based, Vercel-safe)
+        createJobWithBuffers(
+          jobId,
+          questionPaper.buffer,
+          answerSheet.buffer,
+          questionPaper.mimeType,
+          answerSheet.mimeType,
+          false
+        );
+        
+        launchProcessing(jobId, "", "", false);
+        return NextResponse.json({ jobId, status: "queued", isDemo: false });
+      } catch (downloadError) {
+        console.error("File download error:", downloadError);
+        const message = downloadError instanceof Error ? downloadError.message : "Failed to download files from storage";
+        return createErrorResponse(message, 500, requestId);
       }
-      createJob(jobId, files[0].localPath, files[1].localPath, false);
-      launchProcessing(jobId, files[0].localPath, files[1].localPath, false);
-      return NextResponse.json({ jobId, status: "queued", isDemo: false });
+    }
+
+    if (!contentType.includes("multipart/form-data")) {
+      return createErrorResponse("Invalid content type. Expected JSON or multipart/form-data", 400, requestId);
     }
 
     const formData = await request.formData();
@@ -61,9 +109,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (!questionPaperFile || !answerSheetFile) {
-      return NextResponse.json(
-        { error: "Both questionPaper and answerSheet files are required." },
-        { status: 400 }
+      return createErrorResponse(
+        "Both questionPaper and answerSheet files are required", 
+        400, 
+        requestId
       );
     }
 
@@ -74,9 +123,10 @@ export async function POST(request: NextRequest) {
       questionPaperFile.size
     );
     if (!qpValidation.valid) {
-      return NextResponse.json(
-        { error: `Question paper: ${qpValidation.error}` },
-        { status: 400 }
+      return createErrorResponse(
+        `Question paper: ${qpValidation.error}`, 
+        400, 
+        requestId
       );
     }
 
@@ -87,41 +137,43 @@ export async function POST(request: NextRequest) {
       answerSheetFile.size
     );
     if (!asValidation.valid) {
-      return NextResponse.json(
-        { error: `Answer sheet: ${asValidation.error}` },
-        { status: 400 }
+      return createErrorResponse(
+        `Answer sheet: ${asValidation.error}`, 
+        400, 
+        requestId
       );
     }
 
-    // Save files under the OS temporary directory, which is the only writable
-    // location guaranteed by Vercel serverless functions.
     const jobId = uuidv4();
-    const jobDir = await fs.mkdtemp(path.join(os.tmpdir(), "veda-"));
 
-    const qpExt = path.extname(questionPaperFile.name).toLowerCase();
-    const asExt = path.extname(answerSheetFile.name).toLowerCase();
-    const qpPath = path.join(jobDir, `question_paper${qpExt}`);
-    const asPath = path.join(jobDir, `answer_sheet${asExt}`);
+    try {
+      // Process files directly in memory (Vercel-safe)
+      const questionPaperBuffer = Buffer.from(await questionPaperFile.arrayBuffer());
+      const answerSheetBuffer = Buffer.from(await answerSheetFile.arrayBuffer());
 
-    await Promise.all([
-      fs.writeFile(qpPath, Buffer.from(await questionPaperFile.arrayBuffer())),
-      fs.writeFile(asPath, Buffer.from(await answerSheetFile.arrayBuffer())),
-    ]);
+      // Create job with buffers instead of file paths
+      createJobWithBuffers(
+        jobId,
+        questionPaperBuffer,
+        answerSheetBuffer,
+        questionPaperFile.type,
+        answerSheetFile.type,
+        false
+      );
 
-    // Create job and kick off pipeline
-    createJob(jobId, qpPath, asPath, false);
+      // Run pipeline async (don't await — return jobId immediately)
+      launchProcessing(jobId, "", "", false);
 
-    // Run pipeline async (don't await — return jobId immediately)
-    launchProcessing(jobId, qpPath, asPath, false);
-
-    return NextResponse.json({ jobId, status: "queued", isDemo: false });
+      return NextResponse.json({ jobId, status: "queued", isDemo: false });
+    } catch (fileError) {
+      console.error("File processing error:", fileError);
+      const message = fileError instanceof Error ? fileError.message : "Failed to process uploaded files";
+      return createErrorResponse(message, 500, requestId);
+    }
   } catch (err) {
     console.error("POST /api/exams error:", { requestId, error: err });
     const message = err instanceof Error ? err.message : "Unknown server error";
-    return NextResponse.json(
-      { error: message, requestId },
-      { status: 500 }
-    );
+    return createErrorResponse(message, 500, requestId);
   }
 }
 
@@ -131,7 +183,7 @@ function isValidStoragePath(storagePath: string, fileKey: string): boolean {
   const filename = parts[1];
   return (
     filename.startsWith(`${fileKey}-`) &&
-    [".pdf", ".png", ".jpg", ".jpeg"].includes(path.extname(filename).toLowerCase()) &&
+    [".pdf", ".png", ".jpg", ".jpeg"].some(ext => filename.toLowerCase().endsWith(ext)) &&
     !filename.includes("..")
   );
 }
@@ -148,17 +200,24 @@ function launchProcessing(
       await processExam(jobId, questionPaperPath, answerSheetPath, isDemo);
     } catch (error) {
       console.error("Pipeline startup error:", { jobId, error });
+      const { failJob } = await import("@/lib/jobs/job-store");
+      const message = error instanceof Error ? error.message : "Pipeline startup failed";
+      failJob(jobId, message);
     }
   });
 }
 
 async function startDemoJob() {
-  const jobId = uuidv4();
-  // Demo processing is fully data-driven; it must not depend on files that
-  // can disappear between serverless invocations.
-  const qpPath = "";
-  const asPath = "";
-  createJob(jobId, qpPath, asPath, true);
-  launchProcessing(jobId, qpPath, asPath, true);
-  return NextResponse.json({ jobId, status: "queued", isDemo: true });
+  try {
+    const jobId = uuidv4();
+    // Demo processing is fully data-driven; it must not depend on files that
+    // can disappear between serverless invocations.
+    createJob(jobId, "", "", true);
+    launchProcessing(jobId, "", "", true);
+    return NextResponse.json({ jobId, status: "queued", isDemo: true });
+  } catch (error) {
+    console.error("Demo job creation error:", error);
+    const message = error instanceof Error ? error.message : "Failed to create demo job";
+    return createErrorResponse(message, 500);
+  }
 }

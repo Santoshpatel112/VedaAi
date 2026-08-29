@@ -1,23 +1,21 @@
 "use client";
 
 import React from "react";
-import { Bell, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, HelpCircle, Sparkles, ChevronLeft, ChevronDown } from "lucide-react";
 import type { UserSession } from "@/lib/auth/session";
 
 interface TopBarProps {
   title?: string;
-  subtitle?: string;
   breadcrumb?: string;
   session: UserSession | null;
 }
 
 export function TopBar({
   title = "Exams",
-  subtitle,
-  breadcrumb = "Assessment Extraction",
+  breadcrumb,
   session,
 }: TopBarProps) {
-  // Derive initials from real session name
   const initials = session?.name
     ? session.name
         .split(" ")
@@ -27,47 +25,62 @@ export function TopBar({
     : "?";
 
   const displayName = session?.name ?? "Teacher";
-  const displayRole = session?.department ?? session?.role ?? "Teacher";
 
   return (
-    <header className="h-16 bg-white border-b border-[#E2E2E2] px-6 flex items-center justify-between sticky top-0 z-20 shadow-2xs">
-      {/* Left: Breadcrumbs and Title */}
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-[#606266] font-medium">{title}</span>
-        <ChevronRight className="w-3.5 h-3.5 text-[#8C8C8C]" />
-        <span className="text-[#21262C] font-semibold">{breadcrumb}</span>
-        {subtitle && (
-          <span className="hidden sm:inline text-xs text-[#8C8C8C] ml-2 border-l border-[#E2E2E2] pl-3">
-            {subtitle}
-          </span>
+    <header className="h-14 bg-white border-b border-[#EEEEEE] px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20">
+      {/* Left: breadcrumb — Figma style (Exams > Breadcrumb) */}
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-sm text-[#888888] font-normal shrink-0">{title}</span>
+
+        {breadcrumb && (
+          <>
+            <ChevronLeft className="w-3.5 h-3.5 text-[#DDDDDD] rotate-180 shrink-0" />
+            <span className="text-sm text-[#1A1A1A] font-semibold truncate">{breadcrumb}</span>
+          </>
         )}
       </div>
 
-      {/* Right: Actions and User Profile */}
-      <div className="flex items-center gap-3">
-        {/* Notification Bell */}
+      {/* Right: help, bell, sparkle, avatar + name */}
+      <div className="flex items-center gap-1 shrink-0">
+        {/* Help */}
         <button
-          className="w-9 h-9 rounded-xl bg-[#F6F6F6] hover:bg-[#EAEAEA] flex items-center justify-center text-[#606266] transition-colors relative"
-          aria-label="Notifications"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[#888888] hover:bg-[#F5F5F5] transition-colors"
+          aria-label="Help"
         >
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-[#FF5500] rounded-full ring-2 ring-white" />
+          <HelpCircle className="w-[17px] h-[17px]" />
         </button>
 
-        {/* User Profile Pill — shows real session data */}
-        <div className="flex items-center gap-2.5 pl-2 border-l border-[#E2E2E2]">
-          <div className="w-9 h-9 rounded-xl bg-[#FFF3EE] border border-[#FFCCAA] flex items-center justify-center text-[#FF5500] font-bold text-sm shadow-2xs select-none">
+        {/* Bell with orange dot */}
+        <button
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[#888888] hover:bg-[#F5F5F5] transition-colors relative"
+          aria-label="Notifications"
+        >
+          <Bell className="w-[17px] h-[17px]" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF5500] rounded-full border-[1.5px] border-white" />
+        </button>
+
+        {/* Sparkle / AI */}
+        <button
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[#888888] hover:bg-[#F5F5F5] transition-colors"
+          aria-label="AI Features"
+        >
+          <Sparkles className="w-[17px] h-[17px]" />
+        </button>
+
+        {/* Divider */}
+        <div className="w-px h-5 bg-[#EEEEEE] mx-1" />
+
+        {/* Avatar + name + chevron */}
+        <button className="flex items-center gap-2 rounded-full hover:bg-[#F5F5F5] pr-1 pl-0.5 py-0.5 transition-colors">
+          {/* Circular avatar with photo or initials */}
+          <div className="w-8 h-8 rounded-full bg-[#E8E8E8] border border-[#DDDDDD] flex items-center justify-center text-[#444444] font-bold text-xs select-none overflow-hidden shrink-0">
             {initials}
           </div>
-          <div className="hidden lg:flex flex-col">
-            <span className="text-xs font-bold text-[#21262C] leading-none">
-              {displayName}
-            </span>
-            <span className="text-[10px] text-[#8C8C8C] font-medium mt-0.5 capitalize">
-              {displayRole}
-            </span>
-          </div>
-        </div>
+          <span className="hidden sm:block text-sm font-medium text-[#1A1A1A] max-w-[120px] truncate">
+            {displayName}
+          </span>
+          <ChevronDown className="hidden sm:block w-3.5 h-3.5 text-[#AAAAAA] shrink-0" />
+        </button>
       </div>
     </header>
   );

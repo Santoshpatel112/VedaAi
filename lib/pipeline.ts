@@ -1,4 +1,4 @@
-import { updateJobStage, completeJob, failJob } from "@/lib/jobs/job-store";
+import { updateJobStage, completeJob, failJob, getJob } from "@/lib/jobs/job-store";
 import { getEmbeddingProvider } from "@/lib/ai/embedding-provider";
 import { buildQuestions } from "@/lib/extraction/question-extractor";
 import { buildStudentAnswers } from "@/lib/extraction/answer-extractor";
@@ -15,6 +15,7 @@ import {
 /**
  * Main processing pipeline
  * Runs entirely async after the API returns the jobId.
+ * Now supports both file-based (legacy/dev) and buffer-based (production) processing
  */
 export async function processExam(
   jobId: string,
@@ -29,24 +30,46 @@ export async function processExam(
     // Stage 2: Rendering
     updateJobStage(jobId, "rendering", 12);
 
+    // Get job to access buffers if available
+    const job = getJob(jobId);
+    const useBuffers = job?.questionPaperBuffer && job?.answerSheetBuffer;
+
     // Demo jobs use the bundled demo dataset and must not read ephemeral
     // placeholder files, which may not exist on a different serverless instance.
-    const [qpPageCount, asPageCount] = isDemo
-      ? [27, 31]
-      : await Promise.all([
-          getPageCount(questionPaperPath),
-          getPageCount(answerSheetPath),
-        ]).then(([questionPages, answerPages]) => [
-          Math.max(questionPages, 27),
-          Math.max(answerPages, 31),
-        ]);
+    let qpPageCount: number, asPageCount: number;
+    
+    if (isDemo) {
+      qpPageCount = 27;
+      asPageCount = 31;
+    } else if (useBuffers && job) {
+      // Use buffer-based page counting for production
+      const [questionPages, answerPages] = await Promise.all([
+        getPageCount(job.questionPaperBuffer!, job.questionPaperMimeType!),
+        getPageCount(job.answerSheetBuffer!, job.answerSheetMimeType!),
+      ]);
+      qpPageCount = Math.max(questionPages, 27);
+      asPageCount = Math.max(answerPages, 31);
+    } else {
+      // Fallback to file-based processing for local dev
+      const [questionPages, answerPages] = await Promise.all([
+        getPageCount(questionPaperPath),
+        getPageCount(answerSheetPath),
+      ]);
+      qpPageCount = Math.max(questionPages, 27);
+      asPageCount = Math.max(answerPages, 31);
+    }
 
     // Stage 3: Extract questions from question paper
     updateJobStage(jobId, "extracting_questions", 28);
 
-    const rawQuestions = isDemo
-      ? getRealPhysicsQuestions()
-      : await extractQuestionsFromPdf(questionPaperPath);
+    let rawQuestions;
+    if (isDemo) {
+      rawQuestions = getRealPhysicsQuestions();
+    } else if (useBuffers && job) {
+      rawQuestions = await extractQuestionsFromPdf(job.questionPaperBuffer!);
+    } else {
+      rawQuestions = await extractQuestionsFromPdf(questionPaperPath);
+    }
 
     // Stage 4: Parse questions
     updateJobStage(jobId, "parsing_questions", 38);
@@ -61,24 +84,29 @@ export async function processExam(
     // Stage 5: Extract answers from answer sheet
     updateJobStage(jobId, "extracting_answers", 52);
 
-    const rawAnswers = isDemo
-      ? rawQuestions.map((question) => ({
-          questionNumber: question.number,
-          text: `Demo answer for Question ${question.number}: ${question.text}`,
-          regions: [
-            {
-              page: Math.min(Math.ceil(Number(question.number) / 2), 14),
-              bbox: {
-                x: 0.05,
-                y: Number(question.number) % 2 === 1 ? 0.08 : 0.52,
-                width: 0.9,
-                height: 0.35,
-              },
+    let rawAnswers;
+    if (isDemo) {
+      rawAnswers = rawQuestions.map((question) => ({
+        questionNumber: question.number,
+        text: `Demo answer for Question ${question.number}: ${question.text}`,
+        regions: [
+          {
+            page: Math.min(Math.ceil(Number(question.number) / 2), 14),
+            bbox: {
+              x: 0.05,
+              y: Number(question.number) % 2 === 1 ? 0.08 : 0.52,
+              width: 0.9,
+              height: 0.35,
             },
-          ],
-          confidence: 0.98,
-        }))
-      : await extractAnswersFromPdf(answerSheetPath, rawQuestions);
+          },
+        ],
+        confidence: 0.98,
+      }));
+    } else if (useBuffers && job) {
+      rawAnswers = await extractAnswersFromPdf(job.answerSheetBuffer!, rawQuestions);
+    } else {
+      rawAnswers = await extractAnswersFromPdf(answerSheetPath, rawQuestions);
+    }
 
     // Stage 6: Parse answers
     updateJobStage(jobId, "reading_handwriting", 62);

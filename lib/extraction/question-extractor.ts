@@ -7,15 +7,14 @@ import { normalizeDisplayNumber } from "./question-number-detector";
  * Preserves ordering and handles subquestions.
  */
 
-let questionIdCounter = 0;
-
 function generateQuestionId(number: string): string {
   const normalized = normalizeDisplayNumber(number);
   return `q${normalized}`;
 }
 
 export function buildQuestions(extracted: ExtractedQuestion[]): Question[] {
-  questionIdCounter = 0;
+  // Local counter — safe for concurrent requests since each invocation gets its own scope
+  let collisionCounter = 0;
   const seen = new Set<string>();
   const questions: Question[] = [];
 
@@ -24,7 +23,7 @@ export function buildQuestions(extracted: ExtractedQuestion[]): Question[] {
 
     // Handle duplicate IDs (can happen with poorly formatted papers)
     if (seen.has(id)) {
-      id = `${id}_${++questionIdCounter}`;
+      id = `${id}_${++collisionCounter}`;
     }
     seen.add(id);
 

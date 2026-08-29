@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { UploadCloud, FileText, AlertCircle } from "lucide-react";
+import { Upload, AlertCircle } from "lucide-react";
 import { validateFileUpload } from "@/lib/validation/schemas";
 
 interface FileUploadCardProps {
@@ -37,6 +37,7 @@ export function FileUploadCard({
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(false);
     if (disabled) return;
     const file = e.dataTransfer.files[0];
@@ -46,28 +47,34 @@ export function FileUploadCard({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
+    // Reset so same file can be re-selected after removal
+    e.target.value = "";
   };
 
   const activeError = error || localError;
 
   return (
-    <div className="flex flex-col gap-2 w-full">
+    <div className="flex flex-col gap-1.5 w-full">
       <div
         onDragOver={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           if (!disabled) setIsDragOver(true);
         }}
-        onDragLeave={() => setIsDragOver(false)}
+        onDragLeave={(e) => {
+          e.stopPropagation();
+          setIsDragOver(false);
+        }}
         onDrop={handleDrop}
         onClick={() => !disabled && inputRef.current?.click()}
-        className={`relative border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 select-none min-h-[220px] bg-white ${
+        className={`relative border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 select-none min-h-[200px] py-10 px-6 bg-white ${
           disabled
-            ? "opacity-50 cursor-not-allowed border-[#E2E2E2]"
+            ? "opacity-50 cursor-not-allowed border-[#DDDDDD]"
             : activeError
-            ? "border-red-400 bg-red-50/30"
+            ? "border-red-300 bg-red-50/20"
             : isDragOver
-            ? "border-[#FF5500] bg-[#FFF8F5] shadow-md scale-[1.01]"
-            : "border-[#E2E2E2] hover:border-[#FF5500] hover:bg-[#FFF8F5]/60 hover:shadow-xs"
+            ? "border-[#FF5500] bg-[#FFF8F5]"
+            : "border-[#DDDDDD] hover:border-[#BBBBBB]"
         }`}
       >
         <input
@@ -79,19 +86,20 @@ export function FileUploadCard({
           disabled={disabled}
         />
 
-        <div className="w-14 h-14 rounded-2xl bg-[#FFF3EE] border border-[#FFCCAA] flex items-center justify-center text-[#FF5500] mb-4 shadow-2xs group-hover:scale-110 transition-transform">
-          <UploadCloud className="w-7 h-7" />
+        {/* Upload icon — orange cloud from Figma */}
+        <div className="mb-4">
+          <div className="w-12 h-12 mx-auto rounded-full bg-[#FFF5F0] flex items-center justify-center">
+            <Upload className="w-6 h-6 text-[#FF5500]" strokeWidth={2} />
+          </div>
         </div>
 
-        <h3 className="font-bold text-base text-[#21262C] mb-1">{title}</h3>
-        <p className="text-xs text-[#606266] mb-3 max-w-[240px] leading-relaxed">
-          {subtitle}
-        </p>
+        {/* Title */}
+        <h3 className="font-bold text-base text-[#1A1A1A] mb-1">
+          {title}
+        </h3>
 
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#F6F6F6] text-[11px] font-semibold text-[#8C8C8C] border border-[#E2E2E2]">
-          <FileText className="w-3 h-3 text-[#FF5500]" />
-          PDF, PNG, JPG (up to 20MB)
-        </span>
+        {/* Subtitle */}
+        <p className="text-xs text-[#888888] font-medium">{subtitle}</p>
       </div>
 
       {activeError && (

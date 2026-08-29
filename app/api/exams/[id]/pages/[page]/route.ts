@@ -1,58 +1,129 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getJob } from "@/lib/jobs/job-store";
 import { getPageImageBase64 } from "@/lib/documents/pdf-renderer";
-import path from "path";
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; page: string }> }
 ) {
-  const { id, page } = await params;
-  const pageNumber = parseInt(page, 10);
+  try {
+    const { id, page } = await params;
+    const pageNumber = parseInt(page, 10);
 
-  if (isNaN(pageNumber) || pageNumber < 1) {
-    return NextResponse.json({ error: "Invalid page number" }, { status: 400 });
+    if (!id || typeof id !== "string") {
+      return NextResponse.json(
+        { error: "Invalid job ID provided" },
+        { status: 400 }
+      );
+    }
+
+    if (isNaN(pageNumber) || pageNumber < 1) {
+      return NextResponse.json(
+        { error: "Invalid page number" },
+        { status: 400 }
+      );
+    }
+
+    const job = getJob(id);
+    if (!job) {
+      return NextResponse.json(
+        { error: "Job not found" },
+        { status: 404 }
+      );
+    }
+
+    // Demo mode: return a placeholder page image
+    if (job.isDemo) {
+      try {
+        const svgPage = generateDemoPageSvg(pageNumber);
+        return new NextResponse(svgPage, {
+          headers: {
+            "Content-Type": "image/svg+xml",
+            "Cache-Control": "public, max-age=3600",
+          },
+        });
+      } catch (svgError) {
+        console.error("Demo SVG generation error:", svgError);
+        return NextResponse.json(
+          { error: "Failed to generate demo page" },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Use buffer-based processing if available (production)
+    if (job.answerSheetBuffer && job.answerSheetMimeType) {
+      try {
+        const base64 = await getPageImageBase64(job.answerSheetBuffer, pageNumber, job.answerSheetMimeType);
+        
+        if (!base64) {
+          return NextResponse.json(
+            { error: "Page not found" },
+            { status: 404 }
+          );
+        }
+
+        const isPdf = job.answerSheetMimeType.includes("pdf");
+        const buffer = Buffer.from(base64, "base64");
+
+        return new NextResponse(buffer, {
+          headers: {
+            "Content-Type": isPdf ? "application/pdf" : "image/jpeg",
+            "Cache-Control": "public, max-age=3600",
+          },
+        });
+      } catch (bufferError) {
+        console.error("Buffer processing error:", bufferError);
+        return NextResponse.json(
+          { error: "Failed to process page from memory" },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Legacy file-based processing (local dev)
+    if (!job.answerSheetPath) {
+      return NextResponse.json(
+        { error: "Answer sheet not available" },
+        { status: 404 }
+      );
+    }
+
+    try {
+      const base64 = await getPageImageBase64(job.answerSheetPath, pageNumber);
+
+      if (!base64) {
+        return NextResponse.json(
+          { error: "Page not found" },
+          { status: 404 }
+        );
+      }
+
+      const ext = job.answerSheetPath.split('.').pop()?.toLowerCase();
+      const isPdf = ext === "pdf";
+
+      const buffer = Buffer.from(base64, "base64");
+
+      return new NextResponse(buffer, {
+        headers: {
+          "Content-Type": isPdf ? "application/pdf" : "image/jpeg",
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    } catch (fileError) {
+      console.error("File processing error:", fileError);
+      return NextResponse.json(
+        { error: "Failed to process page from file" },
+        { status: 500 }
+      );
+    }
+  } catch (error) {
+    console.error("GET /api/exams/[id]/pages/[page] error:", error);
+    return NextResponse.json(
+      { error: "Internal server error while retrieving page" },
+      { status: 500 }
+    );
   }
-
-  const job = getJob(id);
-  if (!job) {
-    return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  }
-
-  // Demo mode: return a placeholder page image
-  if (job.isDemo) {
-    // Return a simple SVG as a placeholder for demo pages
-    const svgPage = generateDemoPageSvg(pageNumber);
-    return new NextResponse(svgPage, {
-      headers: {
-        "Content-Type": "image/svg+xml",
-        "Cache-Control": "public, max-age=3600",
-      },
-    });
-  }
-
-  if (!job.answerSheetPath) {
-    return NextResponse.json({ error: "Answer sheet not available" }, { status: 404 });
-  }
-
-  const base64 = await getPageImageBase64(job.answerSheetPath, pageNumber);
-
-  if (!base64) {
-    return NextResponse.json({ error: "Page not found" }, { status: 404 });
-  }
-
-  const ext = path.extname(job.answerSheetPath).toLowerCase();
-  const isPdf = ext === ".pdf";
-
-  // Return the file data for the frontend to render with pdfjs
-  const buffer = Buffer.from(base64, "base64");
-
-  return new NextResponse(buffer, {
-    headers: {
-      "Content-Type": isPdf ? "application/pdf" : "image/jpeg",
-      "Cache-Control": "public, max-age=3600",
-    },
-  });
 }
 
 function generateDemoPageSvg(pageNumber: number): string {

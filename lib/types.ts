@@ -89,8 +89,12 @@ export interface ProcessingJob {
   error?: string;
   results?: ExamResults;
   createdAt: number;
-  questionPaperPath?: string;
-  answerSheetPath?: string;
+  questionPaperPath?: string; // Legacy support for local dev
+  answerSheetPath?: string; // Legacy support for local dev
+  questionPaperBuffer?: Buffer; // Memory-based file storage
+  answerSheetBuffer?: Buffer; // Memory-based file storage
+  questionPaperMimeType?: string;
+  answerSheetMimeType?: string;
   isDemo?: boolean;
 }
 

@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
     // Allow large bodies through proxy/middleware layer
     proxyClientMaxBodySize: "50mb",
   },
+  // Empty turbopack config suppresses the webpack/turbopack conflict warning.
+  // PDF.js worker handling is done at runtime in pdf-question-extractor.ts.
+  turbopack: {},
 } as NextConfig;
 
 export default nextConfig;
